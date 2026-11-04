@@ -293,6 +293,15 @@ export default function TeacherDashboardPage() {
           syncAttendanceWithServer(data.attendees);
         }
       }
+
+      // Synchronize overall attendance records to guarantee full state continuity
+      const allRes = await fetch('/api/attendance');
+      if (allRes.ok) {
+        const allData = await allRes.json();
+        if (allData.success && Array.isArray(allData.attendees)) {
+          syncAttendanceWithServer(allData.attendees);
+        }
+      }
     } catch (err) {
       console.warn('Error fetching live attendance:', err);
     } finally {
@@ -313,7 +322,7 @@ export default function TeacherDashboardPage() {
     if (activeSession && a.sessionId === activeSession.id) return true;
     if (selectedWorkshopId) {
       if (a.workshopId === selectedWorkshopId) return true;
-      if (a.sessionId && a.sessionId.includes(selectedWorkshopId)) return true;
+      if (a.sessionId && (a.sessionId === selectedWorkshopId || a.sessionId.includes(selectedWorkshopId))) return true;
       if (workshopName && a.workshopTitle && a.workshopTitle.trim().toLowerCase() === workshopName.trim().toLowerCase()) return true;
     }
     return false;

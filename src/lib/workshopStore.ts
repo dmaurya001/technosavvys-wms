@@ -22,13 +22,21 @@ if (!global.__technosavvysWorkshops) {
 }
 
 function safeLoadFromFile(): Workshop[] {
+  const mergedMap = new Map<string, Workshop>();
+
+  for (const initWs of INITIAL_WORKSHOPS) {
+    mergedMap.set(initWs.id, initWs);
+  }
+
   // 1. Try local data file
   try {
     if (fs.existsSync(LOCAL_STORAGE_FILE)) {
       const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        for (const w of parsed) {
+          if (w && w.id) mergedMap.set(w.id, w);
+        }
       }
     }
   } catch {}
@@ -38,13 +46,15 @@ function safeLoadFromFile(): Workshop[] {
     if (fs.existsSync(TMP_STORAGE_FILE)) {
       const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        for (const w of parsed) {
+          if (w && w.id) mergedMap.set(w.id, w);
+        }
       }
     }
   } catch {}
 
-  return INITIAL_WORKSHOPS;
+  return Array.from(mergedMap.values());
 }
 
 function safeSaveToFile(workshops: Workshop[]) {
@@ -280,3 +290,4 @@ export async function deleteWorkshop(id: string): Promise<boolean> {
 
   return memoryWorkshops.length < initialCount;
 }
+

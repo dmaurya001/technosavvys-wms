@@ -5,7 +5,7 @@ import { INITIAL_WORKSHOPS, INITIAL_ATTENDANCE } from '@/data/mockData';
 import { normalizePhoneNumber } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
 import { saveAttendanceRecord, getAllAttendanceRecords } from '@/lib/attendanceStore';
-import { getAllWorkshops } from '@/lib/workshopStore';
+import { getAllWorkshops, saveWorkshop } from '@/lib/workshopStore';
 
 export async function POST(request: NextRequest) {
   try {
@@ -90,19 +90,35 @@ export async function POST(request: NextRequest) {
           verifySessionPermanentQrToken(candidateId, sessionId, token) ||
           token === getSessionPermanentQrToken(candidateId, sessionId)
         ) {
-          foundWorkshop = {
-            id: candidateId,
-            title: body.workshopTitle || body.course || 'Workshop Session',
-            status: 'Ongoing',
-          };
           foundSession = {
             id: sessionId,
             workshopId: candidateId,
-            sessionTitle: body.sessionTitle || 'Active Workshop Session',
+            sessionTitle: body.sessionTitle || 'Session 1: Main Workshop',
+            date: new Date().toISOString().split('T')[0],
+            startTime: '10:00 AM',
+            endTime: '05:00 PM',
+            location: 'Campus / Virtual Lab',
             status: 'Live',
             isActive: true,
             qrToken: token,
           };
+          foundWorkshop = {
+            id: candidateId,
+            title: body.workshopTitle || body.course || 'Workshop Session',
+            category: 'Web Dev',
+            trainer: 'Lead Instructor',
+            trainerRole: 'Lead Instructor',
+            date: new Date().toISOString().split('T')[0],
+            time: '10:00 AM - 05:00 PM',
+            duration: '6 Hours',
+            location: 'Campus / Virtual Lab',
+            capacity: 100,
+            price: 0,
+            status: 'Ongoing',
+            tags: ['Workshop'],
+            sessions: [foundSession],
+          };
+          saveWorkshop(foundWorkshop as any).catch(() => {});
           break;
         }
       }

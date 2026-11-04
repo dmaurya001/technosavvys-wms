@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
   );
 
   if (session.role === 'teacher') {
-    setSessionCookie(response, TEACHER_COOKIE_NAME, newToken, maxAge);
+    setSessionCookie(response, TEACHER_COOKIE_NAME, newToken, maxAge, request);
   } else {
-    setSessionCookie(response, STUDENT_COOKIE_NAME, newToken, maxAge);
-    setSessionCookie(response, LEGACY_STUDENT_COOKIE_NAME, newToken, maxAge);
+    setSessionCookie(response, STUDENT_COOKIE_NAME, newToken, maxAge, request);
+    setSessionCookie(response, LEGACY_STUDENT_COOKIE_NAME, newToken, maxAge, request);
   }
 
   return response;

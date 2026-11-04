@@ -10,6 +10,7 @@ export interface ParseZipResult {
   entries: BulkZipEntry[];
   totalFiles: number;
   matchedCount: number;
+  suggestedCount: number;
   ambiguousCount: number;
   unmatchedCount: number;
   duplicateCount: number;
@@ -39,7 +40,8 @@ export async function parseAndMatchCertificateZip(
   file: File,
   students: Student[],
   existingWorkshopCertificates: Certificate[],
-  enrolledStudentIds: string[]
+  enrolledStudentIds: string[],
+  approvedStudentIds?: string[]
 ): Promise<ParseZipResult> {
   // 1. File size validation
   if (file.size > MAX_ZIP_FILE_SIZE) {
@@ -48,6 +50,7 @@ export async function parseAndMatchCertificateZip(
       entries: [],
       totalFiles: 0,
       matchedCount: 0,
+      suggestedCount: 0,
       ambiguousCount: 0,
       unmatchedCount: 0,
       duplicateCount: 0,
@@ -83,6 +86,7 @@ export async function parseAndMatchCertificateZip(
           entries: [],
           totalFiles: 0,
           matchedCount: 0,
+          suggestedCount: 0,
           ambiguousCount: 0,
           unmatchedCount: 0,
           duplicateCount: 0,
@@ -105,6 +109,7 @@ export async function parseAndMatchCertificateZip(
           entries: [],
           totalFiles: 0,
           matchedCount: 0,
+          suggestedCount: 0,
           ambiguousCount: 0,
           unmatchedCount: 0,
           duplicateCount: 0,
@@ -119,6 +124,7 @@ export async function parseAndMatchCertificateZip(
           entries: [],
           totalFiles: 0,
           matchedCount: 0,
+          suggestedCount: 0,
           ambiguousCount: 0,
           unmatchedCount: 0,
           duplicateCount: 0,
@@ -136,25 +142,49 @@ export async function parseAndMatchCertificateZip(
       let potentialMatches: Student[] = [];
       let errorMessage: string | undefined;
 
-      // Filter enrolled students first for higher relevance
-      const candidateStudents = students;
+      // Filter candidates: prioritize approved attendees, then enrolled, else all students
+      let candidateStudents = students;
+      if (approvedStudentIds && approvedStudentIds.length > 0) {
+        candidateStudents = students.filter((s) => approvedStudentIds.includes(s.id));
+      } else if (enrolledStudentIds && enrolledStudentIds.length > 0) {
+        candidateStudents = students.filter((s) => enrolledStudentIds.includes(s.id));
+      }
 
-      // Step A: Exact Normalized Name Match
-      const exactMatches = candidateStudents.filter(
-        (s) => s.name.toLowerCase().trim() === cleanName
-      );
-
-      // Step B: Roll/Reg ID embedded in filename
+      // Step A: Roll/Reg ID embedded in filename
       const regMatches = candidateStudents.filter(
         (s) => cleanName.includes(s.regNo.toLowerCase().replace(/[-_.]/g, '')) ||
                cleanName.includes(s.regNo.toLowerCase())
       );
 
+      // Step B: Exact Normalized Full Name Match
+      const exactMatches = candidateStudents.filter(
+        (s) => s.name.toLowerCase().trim() === cleanName
+      );
+
       // Step C: Fuzzy word token match (e.g. "rahul kumar" vs "rahul k")
-      const nameTokens = cleanName.split(' ').filter((t) => t.length > 2);
+      const nameTokens = cleanName.split(' ').filter((t) => t.length >= 2);
       const tokenMatches = candidateStudents.filter((s) => {
+        if (nameTokens.length <= 1) return false;
         const studentTokens = s.name.toLowerCase().split(' ');
         return nameTokens.every((nt) => studentTokens.some((st) => st.includes(nt)));
+      });
+
+      // Step D: Partial Name Match (e.g. "Deepak.pdf" -> "Deepak Maurya")
+      const partialCandidates = candidateStudents.filter((s) => {
+        const studentNameLower = s.name.toLowerCase().trim();
+        const studentWords = studentNameLower.split(' ');
+        if (nameTokens.length === 1) {
+          const token = nameTokens[0];
+          return (
+            studentWords[0] === token ||
+            studentWords.slice(-1)[0] === token ||
+            studentWords.includes(token) ||
+            studentNameLower.startsWith(token + ' ') ||
+            studentNameLower.endsWith(' ' + token) ||
+            (token.length >= 3 && studentNameLower.includes(token))
+          );
+        }
+        return false;
       });
 
       if (regMatches.length === 1) {
@@ -165,7 +195,7 @@ export async function parseAndMatchCertificateZip(
       } else if (exactMatches.length === 1) {
         matchedStudent = exactMatches[0];
         matchStatus = 'matched';
-        confidence = 0.95;
+        confidence = 0.98;
         potentialMatches = [matchedStudent];
       } else if (exactMatches.length > 1) {
         matchedStudent = null; // Strictly do not auto-assign duplicate names
@@ -176,7 +206,7 @@ export async function parseAndMatchCertificateZip(
       } else if (tokenMatches.length === 1) {
         matchedStudent = tokenMatches[0];
         matchStatus = 'matched';
-        confidence = 0.85;
+        confidence = 0.90;
         potentialMatches = [matchedStudent];
       } else if (tokenMatches.length > 1) {
         matchedStudent = null; // Strictly do not auto-assign similar names
@@ -184,15 +214,29 @@ export async function parseAndMatchCertificateZip(
         confidence = 0.4;
         potentialMatches = tokenMatches;
         errorMessage = `Multiple similar student matches found (${tokenMatches.map((s) => s.name).join(', ')}). Manual confirmation required.`;
+      } else if (partialCandidates.length === 1) {
+        // Unique partial match -> Suggested match!
+        matchedStudent = partialCandidates[0];
+        matchStatus = 'suggested';
+        confidence = 0.75;
+        potentialMatches = [matchedStudent];
+        errorMessage = `Suggested match: "${matchedStudent.name}". Admin confirmation required before publishing.`;
+      } else if (partialCandidates.length > 1) {
+        // Multiple partial matches -> Ambiguous!
+        matchedStudent = null;
+        matchStatus = 'ambiguous';
+        confidence = 0.35;
+        potentialMatches = partialCandidates;
+        errorMessage = `Multiple eligible students match "${cleanName}" (${partialCandidates.map((s) => s.name).join(', ')}). Manual selection required.`;
       } else {
         matchedStudent = null;
         matchStatus = 'unmatched';
         confidence = 0;
         potentialMatches = candidateStudents;
-        errorMessage = 'No registered student matched this filename. Select student manually.';
+        errorMessage = 'No eligible student matched this filename. Select student manually.';
       }
 
-      // Step D: Duplicate Checks
+      // Step E: Duplicate Checks
       if (matchedStudent) {
         // Check if certificate already issued in DB for this workshop
         const alreadyIssued = existingWorkshopCertificates.find(
@@ -233,6 +277,7 @@ export async function parseAndMatchCertificateZip(
         entries: [],
         totalFiles: 0,
         matchedCount: 0,
+        suggestedCount: 0,
         ambiguousCount: 0,
         unmatchedCount: 0,
         duplicateCount: 0,
@@ -241,6 +286,7 @@ export async function parseAndMatchCertificateZip(
     }
 
     const matchedCount = entries.filter((e) => e.status === 'matched').length;
+    const suggestedCount = entries.filter((e) => e.status === 'suggested').length;
     const ambiguousCount = entries.filter((e) => e.status === 'ambiguous').length;
     const unmatchedCount = entries.filter((e) => e.status === 'unmatched').length;
     const duplicateCount = entries.filter((e) => e.status === 'duplicate').length;
@@ -250,6 +296,7 @@ export async function parseAndMatchCertificateZip(
       entries,
       totalFiles: entries.length,
       matchedCount,
+      suggestedCount,
       ambiguousCount,
       unmatchedCount,
       duplicateCount,
@@ -260,6 +307,7 @@ export async function parseAndMatchCertificateZip(
       entries: [],
       totalFiles: 0,
       matchedCount: 0,
+      suggestedCount: 0,
       ambiguousCount: 0,
       unmatchedCount: 0,
       duplicateCount: 0,

@@ -76,10 +76,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const data = await res.json();
           if (data.success && Array.isArray(data.workshops) && data.workshops.length > 0) {
             if (isMounted) {
-              setWorkshops(data.workshops);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('technosavvys_workshops', JSON.stringify(data.workshops));
-              }
+              setWorkshops((prev) => {
+                const map = new Map<string, Workshop>();
+                for (const w of data.workshops) map.set(w.id, w);
+                for (const w of prev) {
+                  if (!map.has(w.id)) map.set(w.id, w);
+                }
+                const merged = Array.from(map.values());
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('technosavvys_workshops', JSON.stringify(merged));
+                }
+                return merged;
+              });
               return;
             }
           }
@@ -117,6 +125,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [certificates, setCertificates] = useState<Certificate[]>(INITIAL_CERTIFICATES);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [darkMode, setDarkMode] = useState<boolean>(false);
+
+  // Sync initial attendance from server on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadInitialAttendance() {
+      try {
+        const res = await fetch('/api/attendance');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.attendees) && isMounted) {
+            setAttendance((prev) => {
+              const map = new Map<string, AttendanceRecord>();
+              for (const r of prev) map.set(r.id, r);
+              for (const r of data.attendees) map.set(r.id, r);
+              return Array.from(map.values());
+            });
+          }
+        }
+      } catch {}
+    }
+    loadInitialAttendance();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Sync dark class on html
   useEffect(() => {

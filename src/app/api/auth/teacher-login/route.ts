@@ -105,8 +105,8 @@ export async function POST(request: NextRequest) {
 
     // 4. Set HttpOnly, Secure, SameSite=Lax Session Cookies (8 Hours)
     const maxAgeSeconds = Math.floor(TEACHER_ABSOLUTE_EXPIRY_MS / 1000);
-    setSessionCookie(response, TEACHER_COOKIE_NAME, token, maxAgeSeconds);
-    setSessionCookie(response, ADMIN_COOKIE_NAME, token, maxAgeSeconds);
+    setSessionCookie(response, TEACHER_COOKIE_NAME, token, maxAgeSeconds, request);
+    setSessionCookie(response, ADMIN_COOKIE_NAME, token, maxAgeSeconds, request);
 
     return response;
   } catch (err: any) {

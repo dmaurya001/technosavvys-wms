@@ -305,6 +305,30 @@ export const INITIAL_STUDENTS: Student[] = [
     status: 'Inactive'
   },
   {
+    id: 'STU-009',
+    name: 'Deepak Maurya',
+    email: 'deepak.maurya@technosavvys.edu',
+    phone: '+91 89606 27331',
+    regNo: 'TS-2026-160',
+    college: 'Techno Institute of Technology',
+    batch: 'Batch 2026 - CSE',
+    enrolledWorkshopIds: ['WS-101', 'WS-102', 'WS-103'],
+    totalAttended: 1,
+    status: 'Active'
+  },
+  {
+    id: 'STU-010',
+    name: 'Rahul Sharma',
+    email: 'rahul.sharma@technosavvys.edu',
+    phone: '+91 98765 43218',
+    regNo: 'TS-2026-161',
+    college: 'State Tech University',
+    batch: 'Batch 2026 - CSE',
+    enrolledWorkshopIds: ['WS-101', 'WS-103'],
+    totalAttended: 1,
+    status: 'Active'
+  },
+  {
     id: 'STU-RAM-TEST',
     name: 'Ram',
     email: 'ram.test@technosavvys.edu',
@@ -319,6 +343,42 @@ export const INITIAL_STUDENTS: Student[] = [
 ];
 
 export const INITIAL_ATTENDANCE: AttendanceRecord[] = [
+  {
+    id: 'ATT-9009',
+    workshopId: 'WS-101',
+    workshopTitle: 'Advanced Full-Stack Development with Next.js & Server Actions',
+    sessionId: 'SESS-101-1',
+    sessionTitle: 'Session 1: Architecture, Server Components & App Router',
+    studentId: 'STU-009',
+    studentName: 'Deepak Maurya',
+    studentEmail: 'deepak.maurya@technosavvys.edu',
+    studentPhone: '+91 89606 27331',
+    studentCourse: 'Batch 2026 - CSE',
+    studentRegNo: 'TS-2026-160',
+    date: '2026-11-04',
+    time: '10:00 AM',
+    serverTimestamp: '2026-11-04T04:30:00.000Z',
+    status: 'APPROVED',
+    checkInMethod: 'QR Scan'
+  },
+  {
+    id: 'ATT-9010',
+    workshopId: 'WS-101',
+    workshopTitle: 'Advanced Full-Stack Development with Next.js & Server Actions',
+    sessionId: 'SESS-101-1',
+    sessionTitle: 'Session 1: Architecture, Server Components & App Router',
+    studentId: 'STU-010',
+    studentName: 'Rahul Sharma',
+    studentEmail: 'rahul.sharma@technosavvys.edu',
+    studentPhone: '+91 98765 43218',
+    studentCourse: 'Batch 2026 - CSE',
+    studentRegNo: 'TS-2026-161',
+    date: '2026-11-04',
+    time: '10:05 AM',
+    serverTimestamp: '2026-11-04T04:35:00.000Z',
+    status: 'APPROVED',
+    checkInMethod: 'QR Scan'
+  },
   {
     id: 'ATT-9001',
     workshopId: 'WS-102',

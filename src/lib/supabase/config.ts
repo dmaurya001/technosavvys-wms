@@ -55,3 +55,4 @@ export function getSupabaseConfigStatus(): {
     message,
   };
 }
+

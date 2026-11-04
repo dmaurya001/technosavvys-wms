@@ -270,13 +270,17 @@ export function setSessionCookie(
   response: NextResponse,
   cookieName: string,
   token: string,
-  maxAgeSeconds: number
+  maxAgeSeconds: number,
+  request?: NextRequest
 ): void {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isHttps = request
+    ? request.headers.get('x-forwarded-proto') === 'https' || request.nextUrl.protocol === 'https:'
+    : (process.env.VERCEL === '1' || process.env.COOKIE_SECURE === 'true');
+
   response.cookies.set(cookieName, token, {
     path: '/',
     httpOnly: true,
-    secure: isProd,
+    secure: isHttps,
     sameSite: 'lax',
     maxAge: maxAgeSeconds,
   });

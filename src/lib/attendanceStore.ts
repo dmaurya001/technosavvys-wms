@@ -21,13 +21,21 @@ if (!global.__technosavvysAttendance) {
 }
 
 function safeLoadFromFile(): AttendanceRecord[] {
+  const mergedMap = new Map<string, AttendanceRecord>();
+
+  for (const initRec of INITIAL_ATTENDANCE) {
+    mergedMap.set(initRec.id, initRec);
+  }
+
   // 1. Try local data file
   try {
     if (fs.existsSync(LOCAL_STORAGE_FILE)) {
       const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        for (const r of parsed) {
+          if (r && r.id) mergedMap.set(r.id, r);
+        }
       }
     }
   } catch {}
@@ -37,13 +45,15 @@ function safeLoadFromFile(): AttendanceRecord[] {
     if (fs.existsSync(TMP_STORAGE_FILE)) {
       const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        for (const r of parsed) {
+          if (r && r.id) mergedMap.set(r.id, r);
+        }
       }
     }
   } catch {}
 
-  return INITIAL_ATTENDANCE;
+  return Array.from(mergedMap.values());
 }
 
 function safeSaveToFile(records: AttendanceRecord[]) {
@@ -173,9 +183,26 @@ export async function getAllAttendanceRecords(filter?: {
   }
 
   // Apply filters if provided
+  if (filter?.sessionId && filter?.workshopId) {
+    const sId = filter.sessionId;
+    const wsId = filter.workshopId;
+    return records.filter(
+      (r) =>
+        r.sessionId === sId ||
+        r.workshopId === wsId ||
+        (r.sessionId && (r.sessionId === wsId || r.sessionId.includes(wsId))) ||
+        (r.workshopTitle && filter.workshopId && r.workshopTitle.toLowerCase().includes(filter.workshopId.toLowerCase()))
+    );
+  }
+
   if (filter?.sessionId) {
     const sId = filter.sessionId;
-    return records.filter((r) => r.sessionId === sId || (filter.workshopId && r.workshopId === filter.workshopId));
+    return records.filter(
+      (r) =>
+        r.sessionId === sId ||
+        (r.sessionId && r.sessionId.includes(sId)) ||
+        (filter.workshopId && r.workshopId === filter.workshopId)
+    );
   }
 
   if (filter?.workshopId) {

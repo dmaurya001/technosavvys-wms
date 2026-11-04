@@ -9,6 +9,7 @@ import { Student, Workshop, BulkZipEntry, ZipItemMatchStatus } from '@/types';
 import { parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
 import { createClient } from '@/lib/supabase/client';
 import { logAuditEvent } from '@/lib/audit';
+import { maskEmail, maskPhone } from '@/lib/studentAuth';
 import {
   Upload,
   FileArchive,
@@ -37,7 +38,7 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
   isOpen,
   onClose,
 }) => {
-  const { workshops, students, certificates, addToast } = useApp();
+  const { workshops, students, certificates, attendance, addToast } = useApp();
 
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>(workshops[0]?.id || '');
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
@@ -45,6 +46,7 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
   const [zipEntries, setZipEntries] = useState<BulkZipEntry[]>([]);
   const [activeFilterTab, setActiveFilterTab] = useState<'all' | ZipItemMatchStatus>('all');
   const [previewPdfBlob, setPreviewPdfBlob] = useState<{ url: string; fileName: string } | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ entryId: string; student: Student } | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -60,7 +62,31 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
     setSelectedSessionId(ws?.sessions[0]?.id || '');
     setZipEntries([]);
     setErrorMessage(null);
+    setPendingConfirmation(null);
   };
+
+  // Attendance-approved students for selected workshop & session
+  const approvedAttendeeIds = useMemo(() => {
+    const approvedRecords = attendance.filter(
+      (a) =>
+        (a.workshopId === selectedWorkshopId || (selectedSessionId && a.sessionId === selectedSessionId)) &&
+        (a.status === 'APPROVED' || a.status === 'Present' || a.status === 'CERTIFICATE_ELIGIBLE')
+    );
+
+    const ids = new Set<string>();
+    for (const r of approvedRecords) {
+      if (r.studentId) ids.add(r.studentId);
+      const found = students.find(
+        (s) =>
+          (r.studentId && s.id === r.studentId) ||
+          (r.studentEmail && s.email.toLowerCase() === r.studentEmail.toLowerCase()) ||
+          (r.studentPhone && s.phone.replace(/\D/g, '').endsWith(r.studentPhone.replace(/\D/g, '').slice(-10))) ||
+          (s.name.toLowerCase() === r.studentName.toLowerCase())
+      );
+      if (found) ids.add(found.id);
+    }
+    return Array.from(ids);
+  }, [attendance, students, selectedWorkshopId, selectedSessionId]);
 
   // Enrolled students for selected workshop
   const enrolledStudents = useMemo(() => {
@@ -84,12 +110,14 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
 
     setIsProcessingZip(true);
     setErrorMessage(null);
+    setPendingConfirmation(null);
 
     const result = await parseAndMatchCertificateZip(
       file,
       students,
       existingWorkshopCerts,
-      enrolledStudents.map((s) => s.id)
+      enrolledStudents.map((s) => s.id),
+      approvedAttendeeIds
     );
 
     setIsProcessingZip(false);
@@ -102,20 +130,35 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
 
     setZipEntries(result.entries);
     addToast(
-      `ZIP parsed: ${result.matchedCount} matched, ${result.ambiguousCount} ambiguous, ${result.unmatchedCount} unmatched.`,
-      result.matchedCount > 0 ? 'success' : 'info'
+      `ZIP parsed: ${result.matchedCount} matched, ${result.suggestedCount} suggested, ${result.ambiguousCount} ambiguous, ${result.unmatchedCount} unmatched.`,
+      result.matchedCount > 0 || result.suggestedCount > 0 ? 'success' : 'info'
     );
   };
 
-  // Manual student mapping change
-  const handleManualMapStudent = (entryId: string, studentId: string) => {
-    const targetStudent = students.find((s) => s.id === studentId);
-
+  // Confirm Suggested Match
+  const handleConfirmSuggestedMatch = (entryId: string) => {
     setZipEntries((prev) =>
       prev.map((entry) => {
         if (entry.id !== entryId) return entry;
+        return {
+          ...entry,
+          status: 'matched',
+          confidence: 1.0,
+          manualMappingApproved: true,
+          errorMessage: undefined,
+        };
+      })
+    );
+    const entry = zipEntries.find((e) => e.id === entryId);
+    addToast(`Confirmed certificate match for ${entry?.matchedStudentName || 'student'}!`, 'success');
+  };
 
-        if (!studentId || !targetStudent) {
+  // Initiate Manual Student Mapping (requires admin confirmation)
+  const handleSelectStudentForMapping = (entryId: string, studentId: string) => {
+    if (!studentId) {
+      setZipEntries((prev) =>
+        prev.map((entry) => {
+          if (entry.id !== entryId) return entry;
           return {
             ...entry,
             matchedStudentId: null,
@@ -123,30 +166,67 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
             status: 'unmatched',
             errorMessage: 'Unassigned manually.',
           };
-        }
+        })
+      );
+      return;
+    }
 
-        // Check if student already has certificate in DB
-        const alreadyIssued = existingWorkshopCerts.find((c) => c.studentId === studentId);
-        if (alreadyIssued) {
-          return {
-            ...entry,
-            matchedStudentId: targetStudent.id,
-            matchedStudentName: targetStudent.name,
-            status: 'duplicate',
-            errorMessage: `Duplicate: Certificate #${alreadyIssued.certificateNo} already issued.`,
-          };
-        }
+    const targetStudent = students.find((s) => s.id === studentId);
+    if (!targetStudent) return;
 
+    // Check attendance approval
+    if (approvedAttendeeIds.length > 0 && !approvedAttendeeIds.includes(targetStudent.id)) {
+      addToast(`Rule violation: "${targetStudent.name}" is not attendance-approved for this workshop.`, 'error');
+      return;
+    }
+
+    // Require admin confirmation
+    setPendingConfirmation({ entryId, student: targetStudent });
+  };
+
+  // Confirm Manual Mapping
+  const handleConfirmManualMapping = () => {
+    if (!pendingConfirmation) return;
+    const { entryId, student } = pendingConfirmation;
+
+    // Check if student already has certificate in DB
+    const alreadyIssued = existingWorkshopCerts.find((c) => c.studentId === student.id);
+    if (alreadyIssued) {
+      setZipEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === entryId
+            ? {
+                ...entry,
+                matchedStudentId: student.id,
+                matchedStudentName: student.name,
+                status: 'duplicate',
+                errorMessage: `Duplicate: Certificate #${alreadyIssued.certificateNo} already issued.`,
+              }
+            : entry
+        )
+      );
+      addToast(`Duplicate: Certificate already issued for ${student.name}.`, 'error');
+      setPendingConfirmation(null);
+      return;
+    }
+
+    setZipEntries((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== entryId) return entry;
         return {
           ...entry,
-          matchedStudentId: targetStudent.id,
-          matchedStudentName: targetStudent.name,
+          matchedStudentId: student.id,
+          matchedStudentName: student.name,
           status: 'matched',
           confidence: 1.0,
+          manualMappingApproved: true,
           errorMessage: undefined,
         };
       })
     );
+
+    addToast(`Manual mapping confirmed for ${student.name}!`, 'success');
+    setPendingConfirmation(null);
   };
 
   // Preview PDF in modal
@@ -169,6 +249,7 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
   }, [zipEntries, activeFilterTab]);
 
   const matchedCount = zipEntries.filter((e) => e.status === 'matched').length;
+  const suggestedCount = zipEntries.filter((e) => e.status === 'suggested').length;
   const ambiguousCount = zipEntries.filter((e) => e.status === 'ambiguous').length;
   const unmatchedCount = zipEntries.filter((e) => e.status === 'unmatched').length;
   const duplicateCount = zipEntries.filter((e) => e.status === 'duplicate').length;
@@ -176,7 +257,7 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
   // Final Admin Approval & Batch Publish
   const handlePublishAll = async () => {
     if (matchedCount === 0) {
-      addToast('No matched certificates ready to publish.', 'error');
+      addToast('No confirmed matched certificates ready to publish.', 'error');
       return;
     }
 
@@ -319,7 +400,7 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
               {isProcessingZip ? 'Unpacking & Normalizing PDFs...' : 'Upload Certificates ZIP Archive'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-              ZIP should contain individual PDF files named after attendees, e.g. <strong className="font-mono text-brand-600">Rahul_Kumar.pdf</strong> or <strong className="font-mono text-brand-600">Krishna_Verma.pdf</strong>.
+              ZIP should contain individual PDF files named after attendees, e.g. <strong className="font-mono text-brand-600">Deepak_Maurya.pdf</strong>, <strong className="font-mono text-brand-600">Deepak.pdf</strong> or <strong className="font-mono text-brand-600">Rahul_Kumar.pdf</strong>.
             </p>
 
             <div className="mt-4 flex items-center justify-center gap-4 text-[11px] text-slate-400">
@@ -328,6 +409,8 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
               <span>Max PDF: 10MB</span>
               <span>•</span>
               <span>ZIP-Slip Protected</span>
+              <span>•</span>
+              <span>Smart Fuzzy Matching</span>
             </div>
           </div>
         ) : (
@@ -356,6 +439,17 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Matched ({matchedCount})
+                </button>
+                <button
+                  onClick={() => setActiveFilterTab('suggested')}
+                  className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
+                    activeFilterTab === 'suggested'
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Suggested ({suggestedCount})
                 </button>
                 <button
                   onClick={() => setActiveFilterTab('ambiguous')}
@@ -398,11 +492,41 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
                 onClick={() => {
                   setZipEntries([]);
                   setErrorMessage(null);
+                  setPendingConfirmation(null);
                 }}
               >
                 Upload Different ZIP
               </Button>
             </div>
+
+            {/* Pending Admin Confirmation Banner */}
+            {pendingConfirmation && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-200">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    Admin Confirmation Required: Assign <strong>{pendingConfirmation.student.name}</strong> ({pendingConfirmation.student.id} • {maskEmail(pendingConfirmation.student.email)} • {maskPhone(pendingConfirmation.student.phone)}) to <strong>{zipEntries.find((e) => e.id === pendingConfirmation.entryId)?.fileName}</strong>?
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPendingConfirmation(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-sm"
+                    onClick={handleConfirmManualMapping}
+                  >
+                    Confirm Assignment
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Entries Table */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-72 overflow-y-auto">
@@ -433,32 +557,112 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
                         {entry.cleanName}
                       </td>
 
-                      {/* Student mapping selector */}
-                      <td className="py-3 px-4 min-w-[220px]">
-                        <select
-                          value={entry.matchedStudentId || ''}
-                          onChange={(e) => handleManualMapStudent(entry.id, e.target.value)}
-                          className={`w-full px-2.5 py-1.5 text-xs rounded-lg border font-medium focus:outline-none ${
-                            entry.status === 'matched'
-                              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200'
-                              : entry.status === 'ambiguous'
-                              ? 'border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200'
-                              : entry.status === 'duplicate'
-                              ? 'border-purple-300 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/40 text-purple-950 dark:text-purple-200'
-                              : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200'
-                          }`}
-                        >
-                          <option value="">-- Select student manually --</option>
-                          {students.map((stu) => (
-                            <option key={stu.id} value={stu.id}>
-                              {stu.name} ({stu.regNo}) • {stu.batch}
-                            </option>
-                          ))}
-                        </select>
-                        {entry.errorMessage && (
-                          <p className="text-[10px] text-rose-500 mt-1">
-                            {entry.errorMessage}
-                          </p>
+                      {/* Student mapping selector & Suggested match panel */}
+                      <td className="py-3 px-4 min-w-[280px]">
+                        {entry.status === 'suggested' ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-xs">
+                              <div>
+                                <span className="text-[10px] uppercase tracking-wider font-semibold text-sky-600 dark:text-sky-400">
+                                  Suggested Match:
+                                </span>
+                                <div className="font-bold text-slate-900 dark:text-white">
+                                  {entry.matchedStudentName} ({entry.matchedStudentId})
+                                </div>
+                                {(() => {
+                                  const matchedStu = students.find((s) => s.id === entry.matchedStudentId);
+                                  if (matchedStu) {
+                                    return (
+                                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        {maskEmail(matchedStu.email)} • {maskPhone(matchedStu.phone)}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                className="bg-sky-600 hover:bg-sky-500 text-white shrink-0 text-xs px-2.5 py-1"
+                                icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                                onClick={() => handleConfirmSuggestedMatch(entry.id)}
+                              >
+                                Confirm Match
+                              </Button>
+                            </div>
+
+                            <select
+                              value={entry.matchedStudentId || ''}
+                              onChange={(e) => handleSelectStudentForMapping(entry.id, e.target.value)}
+                              className="w-full px-2 py-1 text-[11px] rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none"
+                            >
+                              <option value="">-- Override with different student --</option>
+                              {students.map((stu) => (
+                                <option key={stu.id} value={stu.id}>
+                                  {stu.name} ({stu.id}) • {maskEmail(stu.email)} • {maskPhone(stu.phone)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : entry.status === 'matched' ? (
+                          <div className="space-y-1">
+                            <div className="font-semibold text-emerald-950 dark:text-emerald-200">
+                              {entry.matchedStudentName} ({entry.matchedStudentId})
+                            </div>
+                            {(() => {
+                              const stu = students.find((s) => s.id === entry.matchedStudentId);
+                              if (stu) {
+                                return (
+                                  <div className="text-[11px] text-emerald-800/80 dark:text-emerald-300/70">
+                                    {maskEmail(stu.email)} • {maskPhone(stu.phone)}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                            <select
+                              value={entry.matchedStudentId || ''}
+                              onChange={(e) => handleSelectStudentForMapping(entry.id, e.target.value)}
+                              className="w-full px-2 py-1 text-[11px] rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 focus:outline-none"
+                            >
+                              <option value={entry.matchedStudentId || ''}>
+                                {entry.matchedStudentName} (Assigned)
+                              </option>
+                              <option value="">-- Unassign / Change --</option>
+                              {students.map((stu) => (
+                                <option key={stu.id} value={stu.id}>
+                                  {stu.name} ({stu.id}) • {maskEmail(stu.email)} • {maskPhone(stu.phone)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <select
+                              value={entry.matchedStudentId || ''}
+                              onChange={(e) => handleSelectStudentForMapping(entry.id, e.target.value)}
+                              className={`w-full px-2.5 py-1.5 text-xs rounded-lg border font-medium focus:outline-none ${
+                                entry.status === 'ambiguous'
+                                  ? 'border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200'
+                                  : entry.status === 'duplicate'
+                                  ? 'border-purple-300 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/40 text-purple-950 dark:text-purple-200'
+                                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                              }`}
+                            >
+                              <option value="">-- Select student manually --</option>
+                              {students.map((stu) => (
+                                <option key={stu.id} value={stu.id}>
+                                  {stu.name} ({stu.id}) • {maskEmail(stu.email)} • {maskPhone(stu.phone)}
+                                </option>
+                              ))}
+                            </select>
+                            {entry.errorMessage && (
+                              <p className="text-[10px] text-rose-500 mt-1">
+                                {entry.errorMessage}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </td>
 
@@ -467,6 +671,8 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
                           variant={
                             entry.status === 'matched'
                               ? 'success'
+                              : entry.status === 'suggested'
+                              ? 'primary'
                               : entry.status === 'ambiguous'
                               ? 'warning'
                               : entry.status === 'duplicate'
@@ -505,7 +711,8 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  {ambiguousCount + unmatchedCount + duplicateCount} files requiring attention will be excluded.
+                  {suggestedCount > 0 && `${suggestedCount} suggested match(es) pending confirmation. `}
+                  {ambiguousCount + unmatchedCount + duplicateCount} file(s) requiring attention will be excluded.
                 </p>
               </div>
 
@@ -567,4 +774,3 @@ export const BulkZipCertificateModal: React.FC<BulkZipCertificateModalProps> = (
     </Modal>
   );
 };
-
