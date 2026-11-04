@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { INITIAL_WORKSHOPS, INITIAL_ATTENDANCE } from '@/data/mockData';
 import { normalizePhoneNumber } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
-import { saveAttendanceRecord } from '@/lib/attendanceStore';
+import { saveAttendanceRecord, getAllAttendanceRecords } from '@/lib/attendanceStore';
+import { getAllWorkshops } from '@/lib/workshopStore';
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,20 @@ export async function POST(request: NextRequest) {
       }
     } catch {
       // Offline fallback
+    }
+
+    if (!foundSession) {
+      try {
+        const allWorkshops = await getAllWorkshops();
+        for (const w of allWorkshops) {
+          const s = w.sessions?.find((sess) => sess.id === sessionId);
+          if (s) {
+            foundWorkshop = w;
+            foundSession = s;
+            break;
+          }
+        }
+      } catch {}
     }
 
     if (!foundSession) {
@@ -133,6 +148,7 @@ export async function POST(request: NextRequest) {
     const isValidToken =
       verifySessionPermanentQrToken(foundWorkshop.id, foundSession.id, token) ||
       token === getSessionPermanentQrToken(foundWorkshop.id, foundSession.id) ||
+      (foundSession.qrToken && token === foundSession.qrToken) ||
       token.includes(foundSession.id);
 
     if (!isValidToken) {
@@ -171,14 +187,15 @@ export async function POST(request: NextRequest) {
       }
     } catch {}
 
-    const mockDup = INITIAL_ATTENDANCE.find(
+    const existingRecords = await getAllAttendanceRecords({ sessionId });
+    const isDupRecord = existingRecords.find(
       (a) =>
         a.sessionId === sessionId &&
         (a.studentEmail.toLowerCase() === cleanEmail ||
           normalizePhoneNumber(a.studentPhone) === cleanPhone)
     );
 
-    if (mockDup) {
+    if (isDupRecord) {
       isDuplicate = true;
     }
 

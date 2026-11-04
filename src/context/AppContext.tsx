@@ -68,14 +68,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
 
   useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('technosavvys_workshops');
-        if (saved !== null) {
-          setWorkshops(JSON.parse(saved));
+    let isMounted = true;
+    async function loadWorkshops() {
+      try {
+        const res = await fetch('/api/workshops');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.workshops) && data.workshops.length > 0) {
+            if (isMounted) {
+              setWorkshops(data.workshops);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('technosavvys_workshops', JSON.stringify(data.workshops));
+              }
+              return;
+            }
+          }
         }
+      } catch (err) {
+        console.warn('[AppContext] Failed to fetch workshops from server:', err);
       }
-    } catch {}
+
+      // Fallback to local storage or INITIAL_WORKSHOPS
+      try {
+        if (typeof window !== 'undefined') {
+          const saved = localStorage.getItem('technosavvys_workshops');
+          if (saved !== null) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              if (isMounted) setWorkshops(parsed);
+              return;
+            }
+          }
+        }
+      } catch {}
+
+      if (isMounted) {
+        setWorkshops(INITIAL_WORKSHOPS);
+      }
+    }
+
+    loadWorkshops();
+    return () => {
+      isMounted = false;
+    };
   }, []);
   const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
@@ -137,6 +172,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
+
+    // Synchronize to Server and Supabase PostgreSQL
+    fetch('/api/workshops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newWorkshop),
+    }).catch((err) => console.warn('[AppContext] Workshop sync warning:', err));
+
     addToast(`Workshop "${newWorkshop.title}" created with ${defaultSessions.length} session(s)!`, 'success');
     logAuditEvent({
       action: 'CREATE_WORKSHOP',
@@ -148,13 +191,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateWorkshop = (id: string, updates: Partial<Workshop>) => {
+    let updatedObj: Workshop | undefined;
     setWorkshops((prev) => {
-      const next = prev.map((ws) => (ws.id === id ? { ...ws, ...updates } : ws));
+      const next = prev.map((ws) => {
+        if (ws.id === id) {
+          updatedObj = { ...ws, ...updates };
+          return updatedObj;
+        }
+        return ws;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem('technosavvys_workshops', JSON.stringify(next));
       }
       return next;
     });
+
+    if (updatedObj) {
+      fetch('/api/workshops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedObj),
+      }).catch((err) => console.warn('[AppContext] Workshop update warning:', err));
+    }
+
     addToast('Workshop updated successfully.', 'info');
     logAuditEvent({
       action: 'UPDATE_WORKSHOP',
@@ -172,6 +231,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
+
+    fetch(`/api/workshops?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).catch((err) => console.warn('[AppContext] Workshop delete warning:', err));
+
     addToast('Workshop deleted.', 'info');
     logAuditEvent({
       action: 'DELETE_WORKSHOP',
@@ -185,6 +249,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.setItem('technosavvys_workshops', JSON.stringify([]));
     }
+
+    fetch('/api/workshops?id=all', {
+      method: 'DELETE',
+    }).catch((err) => console.warn('[AppContext] Workshop clear warning:', err));
+
     addToast('All existing workshops deleted.', 'info');
     logAuditEvent({
       action: 'CLEAR_WORKSHOPS',

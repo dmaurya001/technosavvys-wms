@@ -310,10 +310,13 @@ export default function TeacherDashboardPage() {
   }, [fetchLiveAttendance]);
 
   const registeredAttendees = attendance.filter((a) => {
-    if (activeSession) {
-      return a.sessionId === activeSession.id || a.workshopId === selectedWorkshopId;
+    if (activeSession && a.sessionId === activeSession.id) return true;
+    if (selectedWorkshopId) {
+      if (a.workshopId === selectedWorkshopId) return true;
+      if (a.sessionId && a.sessionId.includes(selectedWorkshopId)) return true;
+      if (workshopName && a.workshopTitle && a.workshopTitle.trim().toLowerCase() === workshopName.trim().toLowerCase()) return true;
     }
-    return a.workshopId === selectedWorkshopId;
+    return false;
   });
 
   const pendingCount = registeredAttendees.filter(

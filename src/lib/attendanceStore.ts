@@ -1,68 +1,88 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { AttendanceRecord, AttendanceStatus } from '@/types';
 import { INITIAL_ATTENDANCE } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
-const STORAGE_FILE = path.join(DATA_DIR, 'attendance-records.json');
+const LOCAL_STORAGE_FILE = path.join(DATA_DIR, 'attendance-records.json');
+const TMP_STORAGE_FILE = path.join(os.tmpdir(), 'technosavvys-attendance.json');
 
-// In-memory cache synced with INITIAL_ATTENDANCE
-let isInitialized = false;
+declare global {
+  // eslint-disable-next-line no-var
+  var __technosavvysAttendance: AttendanceRecord[] | undefined;
+}
 
-function ensureDataFile() {
+let memoryAttendance: AttendanceRecord[] = global.__technosavvysAttendance || [];
+if (!global.__technosavvysAttendance) {
+  global.__technosavvysAttendance = memoryAttendance;
+}
+
+function safeLoadFromFile(): AttendanceRecord[] {
+  // 1. Try local data file
+  try {
+    if (fs.existsSync(LOCAL_STORAGE_FILE)) {
+      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  // 2. Try /tmp file (Vercel Serverless environment)
+  try {
+    if (fs.existsSync(TMP_STORAGE_FILE)) {
+      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  return INITIAL_ATTENDANCE;
+}
+
+function safeSaveToFile(records: AttendanceRecord[]) {
+  // Try /tmp directory first (always writable in Vercel Lambdas)
+  try {
+    fs.writeFileSync(TMP_STORAGE_FILE, JSON.stringify(records, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[attendanceStore] Warning writing to /tmp:', err);
+  }
+
+  // Try local data directory if writable
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    if (!fs.existsSync(STORAGE_FILE)) {
-      // Seed with INITIAL_ATTENDANCE
-      fs.writeFileSync(STORAGE_FILE, JSON.stringify(INITIAL_ATTENDANCE, null, 2), 'utf-8');
-    }
+    fs.writeFileSync(LOCAL_STORAGE_FILE, JSON.stringify(records, null, 2), 'utf-8');
   } catch (err) {
-    console.warn('[attendanceStore] File system access warning:', err);
-  }
-}
-
-function loadFromFile(): AttendanceRecord[] {
-  ensureDataFile();
-  try {
-    if (fs.existsSync(STORAGE_FILE)) {
-      const raw = fs.readFileSync(STORAGE_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.warn('[attendanceStore] Read error, falling back to in-memory:', err);
-  }
-  return INITIAL_ATTENDANCE;
-}
-
-function saveToFile(records: AttendanceRecord[]) {
-  ensureDataFile();
-  try {
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(records, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('[attendanceStore] Write error:', err);
+    // Expected on read-only serverless filesystems
   }
 }
 
 export function initAttendanceStore() {
-  if (isInitialized) return;
-  const records = loadFromFile();
-  // Sync with INITIAL_ATTENDANCE without clearing existing items
-  for (const rec of records) {
-    if (!INITIAL_ATTENDANCE.some((a) => a.id === rec.id)) {
-      INITIAL_ATTENDANCE.push(rec);
+  if (!memoryAttendance || memoryAttendance.length === 0) {
+    const loaded = safeLoadFromFile();
+    memoryAttendance.length = 0;
+    memoryAttendance.push(...loaded);
+
+    for (const initRec of INITIAL_ATTENDANCE) {
+      if (!memoryAttendance.some((a) => a.id === initRec.id)) {
+        memoryAttendance.push(initRec);
+      }
     }
+    global.__technosavvysAttendance = memoryAttendance;
   }
-  isInitialized = true;
 }
 
 /**
- * Retrieve all attendance records, optionally filtered by workshopId or sessionId
+ * Retrieve all attendance records:
+ * Single Source of Truth: Supabase PostgreSQL (if configured) -> Persistent Cache Fallback
  */
 export async function getAllAttendanceRecords(filter?: {
   workshopId?: string;
@@ -70,58 +90,101 @@ export async function getAllAttendanceRecords(filter?: {
 }): Promise<AttendanceRecord[]> {
   initAttendanceStore();
 
-  let records = [...INITIAL_ATTENDANCE];
+  let records = [...memoryAttendance];
 
-  // Try querying Supabase if available
-  try {
-    const supabase = createAdminClient();
-    const query = supabase.from('attendance').select('*');
-    if (filter?.sessionId) {
-      query.eq('session_id', filter.sessionId);
-    } else if (filter?.workshopId) {
-      query.eq('workshop_id', filter.workshopId);
-    }
-    const { data, error } = await query;
-    if (!error && Array.isArray(data) && data.length > 0) {
-      for (const row of data) {
-        const mapped: AttendanceRecord = {
-          id: row.id,
-          workshopId: row.workshop_id || filter?.workshopId || '',
-          workshopTitle: row.workshop_title || 'Workshop',
-          sessionId: row.session_id || filter?.sessionId || '',
-          sessionTitle: row.session_title || 'Workshop Session',
-          studentName: row.student_name || row.notes || 'Student',
-          studentEmail: row.student_email || '',
-          studentPhone: row.student_phone || '',
-          studentCourse: row.student_course || 'Workshop Session',
-          date: row.check_in_time ? row.check_in_time.split('T')[0] : new Date().toISOString().split('T')[0],
-          time: row.check_in_time ? new Date(row.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-          serverTimestamp: row.check_in_time || new Date().toISOString(),
-          status: (row.status as AttendanceStatus) || 'PENDING_REVIEW',
-          checkInMethod: (row.method as any) || 'QR Scan',
-          notes: row.notes || '',
-        };
-        const idx = records.findIndex((r) => r.id === mapped.id);
-        if (idx >= 0) {
-          records[idx] = mapped;
-        } else {
-          records.unshift(mapped);
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase
+        .from('attendance')
+        .select(`
+          id,
+          status,
+          check_in_method,
+          check_in_time,
+          notes,
+          workshop_sessions (
+            id,
+            session_title,
+            session_date,
+            workshops (
+              id,
+              code,
+              title
+            )
+          ),
+          students (
+            id,
+            full_name,
+            email,
+            phone,
+            registration_no,
+            college,
+            batch
+          )
+        `)
+        .order('check_in_time', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        for (const row of data) {
+          const sess = (row as any).workshop_sessions;
+          const ws = sess?.workshops;
+          const stu = (row as any).students;
+
+          const wsCode = ws?.code || ws?.id || '';
+          const sessId = sess?.id || '';
+          const checkInTime = row.check_in_time || new Date().toISOString();
+
+          const mapped: AttendanceRecord = {
+            id: row.id,
+            workshopId: wsCode,
+            workshopTitle: ws?.title || 'Workshop',
+            sessionId: sessId,
+            sessionTitle: sess?.session_title || 'Session 1: Main Workshop',
+            studentId: stu?.id,
+            studentName: stu?.full_name || 'Student',
+            studentEmail: stu?.email || '',
+            studentPhone: stu?.phone || '',
+            studentCourse: stu?.college || stu?.batch || 'Web Dev',
+            studentRegNo: stu?.registration_no,
+            date: checkInTime.split('T')[0],
+            time: new Date(checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            serverTimestamp: checkInTime,
+            status: (row.status as AttendanceStatus) || 'PENDING_REVIEW',
+            checkInMethod: (row.check_in_method as any) || 'QR Scan',
+            notes: row.notes || 'Verified QR check-in',
+          };
+
+          const idx = records.findIndex((r) => r.id === mapped.id || (r.studentEmail === mapped.studentEmail && r.sessionId === mapped.sessionId));
+          if (idx >= 0) {
+            records[idx] = mapped;
+          } else {
+            records.unshift(mapped);
+          }
         }
+
+        memoryAttendance = records;
+        global.__technosavvysAttendance = records;
+        safeSaveToFile(records);
       }
+    } catch (err) {
+      console.warn('[attendanceStore] Supabase query warning, using persistent store:', err);
     }
-  } catch {
-    // Offline fallback: records already contains INITIAL_ATTENDANCE
   }
 
+  // Apply filters if provided
   if (filter?.sessionId) {
-    return records.filter((r) => r.sessionId === filter.sessionId);
+    const sId = filter.sessionId;
+    return records.filter((r) => r.sessionId === sId || (filter.workshopId && r.workshopId === filter.workshopId));
   }
+
   if (filter?.workshopId) {
     const wsId = filter.workshopId;
     return records.filter(
       (r) =>
         r.workshopId === wsId ||
-        (r.sessionId && r.sessionId.includes(wsId))
+        (r.sessionId && r.sessionId.includes(wsId)) ||
+        (r.workshopTitle && r.workshopTitle.toLowerCase().includes(wsId.toLowerCase()))
     );
   }
 
@@ -129,40 +192,85 @@ export async function getAllAttendanceRecords(filter?: {
 }
 
 /**
- * Save new attendance record into persistent store and memory
+ * Save new attendance record into persistent store and Supabase
  */
 export async function saveAttendanceRecord(record: AttendanceRecord): Promise<AttendanceRecord> {
   initAttendanceStore();
 
-  // Add or update in memory
-  const idx = INITIAL_ATTENDANCE.findIndex((a) => a.id === record.id);
+  // 1. Add or update in memory cache
+  const idx = memoryAttendance.findIndex((a) => a.id === record.id);
   if (idx >= 0) {
-    INITIAL_ATTENDANCE[idx] = record;
+    memoryAttendance[idx] = record;
   } else {
-    INITIAL_ATTENDANCE.unshift(record);
+    memoryAttendance.unshift(record);
   }
+  global.__technosavvysAttendance = memoryAttendance;
+  safeSaveToFile(memoryAttendance);
 
-  // Persist to local JSON file
-  saveToFile(INITIAL_ATTENDANCE);
+  // 2. Persist to Supabase PostgreSQL if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createAdminClient();
 
-  // Try persisting to Supabase
-  try {
-    const supabase = createAdminClient();
-    await supabase.from('attendance').upsert({
-      id: record.id,
-      workshop_id: record.workshopId,
-      session_id: record.sessionId,
-      student_name: record.studentName,
-      student_email: record.studentEmail,
-      student_phone: record.studentPhone,
-      student_course: record.studentCourse,
-      check_in_time: record.serverTimestamp || new Date().toISOString(),
-      status: record.status,
-      method: record.checkInMethod || 'QR Scan',
-      notes: record.notes || 'Submitted via QR check-in',
-    });
-  } catch {
-    // Supabase offline/mock fallback
+      // Find or create student
+      let studentUuid: string | null = null;
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id')
+        .or(`email.eq.${record.studentEmail},phone.eq.${record.studentPhone}`)
+        .maybeSingle();
+
+      if (existingStudent?.id) {
+        studentUuid = existingStudent.id;
+      } else {
+        const { data: newStu } = await supabase
+          .from('students')
+          .insert({
+            full_name: record.studentName,
+            email: record.studentEmail,
+            phone: record.studentPhone,
+            registration_no: record.studentRegNo || `TS-${Date.now().toString().slice(-4)}`,
+            college: record.studentCourse || 'Web Dev',
+            batch: 'Batch 2026',
+          })
+          .select('id')
+          .single();
+        if (newStu?.id) studentUuid = newStu.id;
+      }
+
+      // Find workshop session UUID
+      let sessionUuid: string | null = null;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(record.sessionId);
+      if (isUuid) {
+        sessionUuid = record.sessionId;
+      } else {
+        const { data: sessRow } = await supabase
+          .from('workshop_sessions')
+          .select('id')
+          .eq('session_title', record.sessionTitle)
+          .maybeSingle();
+        if (sessRow?.id) {
+          sessionUuid = sessRow.id;
+        }
+      }
+
+      // Upsert into attendance if relations resolved
+      if (sessionUuid && studentUuid) {
+        await supabase.from('attendance').upsert(
+          {
+            session_id: sessionUuid,
+            student_id: studentUuid,
+            status: record.status || 'PENDING_REVIEW',
+            check_in_method: record.checkInMethod || 'QR Scan',
+            check_in_time: record.serverTimestamp || new Date().toISOString(),
+            notes: record.notes || 'Verified Permanent Session QR. Awaiting Admin Approval.',
+          },
+          { onConflict: 'session_id,student_id' }
+        );
+      }
+    } catch (err) {
+      console.warn('[attendanceStore] Supabase save warning:', err);
+    }
   }
 
   return record;
@@ -177,17 +285,19 @@ export async function updateAttendanceStatusInStore(
 ): Promise<AttendanceRecord | null> {
   initAttendanceStore();
 
-  const record = INITIAL_ATTENDANCE.find((a) => a.id === id);
+  const record = memoryAttendance.find((a) => a.id === id);
   if (!record) return null;
 
   record.status = status;
-  saveToFile(INITIAL_ATTENDANCE);
+  global.__technosavvysAttendance = memoryAttendance;
+  safeSaveToFile(memoryAttendance);
 
-  // Try updating in Supabase
-  try {
-    const supabase = createAdminClient();
-    await supabase.from('attendance').update({ status }).eq('id', id);
-  } catch {}
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createAdminClient();
+      await supabase.from('attendance').update({ status }).eq('id', id);
+    } catch {}
+  }
 
   return record;
 }
@@ -203,7 +313,7 @@ export async function bulkUpdateAttendanceStatusInStore(
 
   let count = 0;
   for (const id of ids) {
-    const record = INITIAL_ATTENDANCE.find((a) => a.id === id);
+    const record = memoryAttendance.find((a) => a.id === id);
     if (record) {
       record.status = status;
       count++;
@@ -211,11 +321,15 @@ export async function bulkUpdateAttendanceStatusInStore(
   }
 
   if (count > 0) {
-    saveToFile(INITIAL_ATTENDANCE);
-    try {
-      const supabase = createAdminClient();
-      await supabase.from('attendance').update({ status }).in('id', ids);
-    } catch {}
+    global.__technosavvysAttendance = memoryAttendance;
+    safeSaveToFile(memoryAttendance);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createAdminClient();
+        await supabase.from('attendance').update({ status }).in('id', ids);
+      } catch {}
+    }
   }
 
   return count;
