@@ -126,6 +126,7 @@ export const SessionQRModal: React.FC<SessionQRModalProps> = ({
           {/* QR Container */}
           <div className="relative p-3 bg-white rounded-2xl shadow-2xl border-4 border-brand-500/30">
             {qrDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={qrDataUrl}
                 alt={`QR code for ${session.sessionTitle}`}

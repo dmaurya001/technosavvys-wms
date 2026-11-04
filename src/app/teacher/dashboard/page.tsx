@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
@@ -42,7 +42,7 @@ import {
   X
 } from 'lucide-react';
 import { exportSessionAttendanceToExcel } from '@/lib/excelExport';
-import { parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
+import { parseAndMatchFiles, parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
 import { maskEmail, maskPhone } from '@/lib/studentAuth';
 import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import { createClient } from '@/lib/supabase/client';
@@ -427,19 +427,15 @@ export default function TeacherDashboardPage() {
   };
 
   // --------------------------------------------------------------------------
-  // SECTION 3: CERTIFICATES STATE, DISAMBIGUATION & PUBLISH
+  // SECTION 3: CERTIFICATES STATE, MULTI-UPLOAD, DISAMBIGUATION & PUBLISH
   // --------------------------------------------------------------------------
-  const [zipFile, setZipFile] = useState<File | null>(null);
-  const [isParsingZip, setIsParsingZip] = useState(false);
   const [matchedEntries, setMatchedEntries] = useState<BulkZipEntry[]>([]);
-  const [zipSummary, setZipSummary] = useState<{
-    total: number;
-    matched: number;
-    unmatched: number;
-    ambiguous: number;
-  } | null>(null);
+  const [isParsingFiles, setIsParsingFiles] = useState(false);
+  const [certFilterTab, setCertFilterTab] = useState<'ALL' | 'matched' | 'suggested' | 'ambiguous' | 'unmatched' | 'failed'>('ALL');
   const [isPublishingCerts, setIsPublishingCerts] = useState(false);
   const [publishSuccessCount, setPublishSuccessCount] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewPdfBlob, setPreviewPdfBlob] = useState<{ url: string; fileName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Disambiguation Modal State
@@ -449,47 +445,149 @@ export default function TeacherDashboardPage() {
   const [adminOverrideConflict, setAdminOverrideConflict] = useState<boolean>(false);
   const [explicitConfirmation, setExplicitConfirmation] = useState<boolean>(false);
 
-  const handleZipFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Clean eligible approved students computation strictly for the selected workshop
+  const eligibleApprovedStudents = useMemo(() => {
+    const approvedAttendees = attendance.filter((a) => {
+      const isApproved =
+        a.status === 'APPROVED' ||
+        a.status === 'Present' ||
+        a.status === 'CERTIFICATE_ELIGIBLE';
+      if (!isApproved) return false;
+      if (activeSession && a.sessionId === activeSession.id) return true;
+      if (selectedWorkshopId) {
+        if (a.workshopId === selectedWorkshopId) return true;
+        if (a.sessionId && (a.sessionId === selectedWorkshopId || a.sessionId.includes(selectedWorkshopId))) return true;
+        if (workshopName && a.workshopTitle && a.workshopTitle.trim().toLowerCase() === workshopName.trim().toLowerCase()) return true;
+      }
+      return false;
+    });
 
-    if (!file.name.toLowerCase().endsWith('.zip')) {
-      addToast('Please upload a valid .zip file containing student PDF certificates.', 'error');
-      return;
+    const studentMap = new Map<string, Student>();
+    for (const att of approvedAttendees) {
+      const existing = students.find(
+        (s) => (att.studentId && s.id === att.studentId) || (att.studentEmail && s.email.toLowerCase() === att.studentEmail.toLowerCase())
+      );
+      const stuObj: Student = existing || {
+        id: att.studentId || `STU-${att.studentEmail.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`,
+        name: att.studentName,
+        email: att.studentEmail,
+        phone: att.studentPhone,
+        college: att.studentCourse || 'Web Dev',
+        batch: 'Batch 2026',
+        regNo: att.studentRegNo || 'REG-PENDING',
+        totalAttended: 1,
+        enrolledWorkshopIds: [selectedWorkshopId],
+        status: 'Active',
+      };
+      if (!studentMap.has(stuObj.id)) {
+        studentMap.set(stuObj.id, stuObj);
+      }
     }
+    return Array.from(studentMap.values());
+  }, [attendance, activeSession, selectedWorkshopId, workshopName, students]);
 
-    setZipFile(file);
-    setIsParsingZip(true);
+  const filesSummary = useMemo(() => {
+    const total = matchedEntries.length;
+    const matched = matchedEntries.filter((e) => e.status === 'matched').length;
+    const suggested = matchedEntries.filter((e) => e.status === 'suggested').length;
+    const ambiguous = matchedEntries.filter((e) => e.status === 'ambiguous').length;
+    const unmatched = matchedEntries.filter((e) => e.status === 'unmatched').length;
+    const failed = matchedEntries.filter((e) => e.status === 'failed' || e.status === 'duplicate').length;
+    return { total, matched, suggested, ambiguous, unmatched, failed };
+  }, [matchedEntries]);
+
+  // Unified File Upload Handler (Handles Individual PDFs, Multi-PDFs, and ZIP archives)
+  const handleFilesUpload = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (!files || files.length === 0) return;
+
+    setIsParsingFiles(true);
     setPublishSuccessCount(null);
 
     try {
-      const enrolledIds = students.map((s) => s.id);
-      const res = await parseAndMatchCertificateZip(file, students, certificates, enrolledIds);
+      const candidateStudents = eligibleApprovedStudents.length > 0 ? eligibleApprovedStudents : students;
+      const enrolledIds = candidateStudents.map((s) => s.id);
+
+      const res = await parseAndMatchFiles(
+        files,
+        candidateStudents,
+        certificates,
+        enrolledIds,
+        matchedEntries
+      );
 
       if (!res.success) {
-        addToast(res.error || 'Failed to parse ZIP archive', 'error');
-        setZipFile(null);
+        addToast(res.error || 'Failed to process files.', 'error');
         return;
       }
 
       setMatchedEntries(res.entries);
-      setZipSummary({
-        total: res.totalFiles,
-        matched: res.matchedCount,
-        unmatched: res.unmatchedCount,
-        ambiguous: res.ambiguousCount,
-      });
-
       addToast(
-        `Extracted ${res.totalFiles} certificates: ${res.matchedCount} matched, ${res.ambiguousCount} ambiguous, ${res.unmatchedCount} unmatched.`,
+        `Processed ${res.totalFiles} certificates: ${res.matchedCount} matched, ${res.suggestedCount || 0} suggested, ${res.ambiguousCount} ambiguous, ${res.unmatchedCount} unmatched.`,
         'success'
       );
     } catch (err: any) {
-      console.error('ZIP Parsing error:', err);
-      addToast(`Error processing ZIP: ${err.message}`, 'error');
+      console.error('File parsing error:', err);
+      addToast(`Error processing files: ${err.message}`, 'error');
     } finally {
-      setIsParsingZip(false);
+      setIsParsingFiles(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleRemoveEntry = (id: string, fileName: string) => {
+    if (!window.confirm(`Are you sure you want to remove "${fileName}" from the upload batch?`)) {
+      return;
+    }
+    setMatchedEntries((prev) => prev.filter((e) => e.id !== id));
+    addToast(`Removed "${fileName}" from batch.`, 'info');
+  };
+
+  const handleClearBatch = () => {
+    if (matchedEntries.length === 0) return;
+    if (!window.confirm(`Are you sure you want to clear all ${matchedEntries.length} files from this upload batch?`)) {
+      return;
+    }
+    setMatchedEntries([]);
+    setPublishSuccessCount(null);
+    addToast('Cleared upload batch.', 'info');
+  };
+
+  const handleConfirmSuggestedMatch = (id: string) => {
+    setMatchedEntries((prev) =>
+      prev.map((e) => {
+        if (e.id === id && e.suggestedStudentId) {
+          return {
+            ...e,
+            matchedStudentId: e.suggestedStudentId,
+            matchedStudentName: e.suggestedStudentName || null,
+            status: 'matched',
+            confidence: 0.95,
+            manualMappingApproved: true,
+            manualMappingApprovedBy: 'Lead Instructor (Confirmed Suggestion)',
+            manualMappingApprovedAt: new Date().toISOString(),
+          };
+        }
+        return e;
+      })
+    );
+    addToast('Suggested match confirmed & approved!', 'success');
+  };
+
+  const openPreviewModal = (entry: BulkZipEntry) => {
+    if (!entry.fileBlob) {
+      addToast('Cannot preview: PDF file data not found.', 'error');
+      return;
+    }
+    const url = URL.createObjectURL(entry.fileBlob);
+    setPreviewPdfBlob({ url, fileName: entry.fileName });
+  };
+
+  const closePreviewModal = () => {
+    if (previewPdfBlob?.url) {
+      URL.revokeObjectURL(previewPdfBlob.url);
+    }
+    setPreviewPdfBlob(null);
   };
 
   // Check attendance approval status for a student
@@ -556,7 +654,6 @@ export default function TeacherDashboardPage() {
 
   // Check if a candidate already has a conflicting certificate assigned
   const checkCandidateConflict = (candidateId: string): { conflict: boolean; reason?: string } => {
-    // Check if another entry in this ZIP is already mapped to candidate
     const existingInZip = matchedEntries.find(
       (e, idx) => idx !== disambiguateIndex && e.matchedStudentId === candidateId
     );
@@ -567,7 +664,6 @@ export default function TeacherDashboardPage() {
       };
     }
 
-    // Check if certificate already exists in DB for this workshop
     const existingCert = certificates.find(
       (c) => c.studentId === candidateId && c.workshopId === selectedWorkshopId
     );
@@ -585,7 +681,8 @@ export default function TeacherDashboardPage() {
   const handleConfirmManualMapping = async () => {
     if (disambiguateIndex === null || !disambiguateEntry || !selectedCandidateId) return;
 
-    const candidate = students.find((s) => s.id === selectedCandidateId);
+    const candidate = eligibleApprovedStudents.find((s) => s.id === selectedCandidateId) ||
+      students.find((s) => s.id === selectedCandidateId);
     if (!candidate) return;
 
     const conflictCheck = checkCandidateConflict(selectedCandidateId);
@@ -600,7 +697,6 @@ export default function TeacherDashboardPage() {
     }
 
     // Update matchedEntries
-    const prevStatus = matchedEntries[disambiguateIndex].status;
     setMatchedEntries((prev) => {
       const copy = [...prev];
       copy[disambiguateIndex] = {
@@ -610,21 +706,11 @@ export default function TeacherDashboardPage() {
         status: 'matched',
         confidence: 1.0,
         manualMappingApproved: true,
-        manualMappingApprovedBy: 'Lead Instructor',
+        manualMappingApprovedBy: 'Lead Instructor (Manual Selection)',
         manualMappingApprovedAt: new Date().toISOString(),
       };
       return copy;
     });
-
-    // Update zipSummary
-    if (zipSummary && prevStatus !== 'matched') {
-      setZipSummary({
-        ...zipSummary,
-        matched: zipSummary.matched + 1,
-        ambiguous: prevStatus === 'ambiguous' ? Math.max(0, zipSummary.ambiguous - 1) : zipSummary.ambiguous,
-        unmatched: prevStatus === 'unmatched' ? Math.max(0, zipSummary.unmatched - 1) : zipSummary.unmatched,
-      });
-    }
 
     await logAuditEvent({
       action: 'MANUAL_CERTIFICATE_MAPPING_APPROVED',
@@ -661,64 +747,41 @@ export default function TeacherDashboardPage() {
     setIsPublishingCerts(true);
 
     try {
-      const supabase = createClient();
-      let publishedCount = 0;
+      // Convert eligible blobs to Base64 payloads for secure server-side upload
+      const certPayloads = await Promise.all(
+        eligibleEntries.map(async (entry) => {
+          const buffer = await entry.fileBlob.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString('base64');
+          return {
+            fileName: entry.fileName,
+            studentId: entry.matchedStudentId!,
+            studentName: entry.matchedStudentName || 'Student',
+            fileBase64: base64,
+          };
+        })
+      );
 
-      for (const entry of eligibleEntries) {
-        const studentId = entry.matchedStudentId!;
-        const storagePath = `certificates/${selectedWorkshopId}_${studentId}_${Date.now()}.pdf`;
-
-        try {
-          await supabase.storage
-            .from('certificates')
-            .upload(storagePath, entry.fileBlob, {
-              contentType: 'application/pdf',
-              upsert: true,
-            });
-        } catch {}
-
-        const certNumber = `TECH-${new Date().getFullYear()}-${Math.floor(
-          1000 + Math.random() * 9000
-        )}`;
-        const verificationHash = `${certNumber}_${studentId}_${Date.now()}`;
-
-        try {
-          await supabase.from('certificates').insert([
-            {
-              certificate_no: certNumber,
-              student_id: studentId,
-              workshop_id: selectedWorkshopId,
-              trainer_name: 'Lead Instructor',
-              issue_date: workshopDate || new Date().toISOString().split('T')[0],
-              grade: 'Distinction',
-              status: 'Issued',
-              score: 95,
-              verification_hash: verificationHash,
-              storage_path: storagePath,
-              file_name: entry.fileName,
-              approved_by: entry.manualMappingApprovedBy || 'Lead Instructor',
-            },
-          ]);
-        } catch {}
-
-        publishedCount++;
-      }
-
-      await logAuditEvent({
-        action: 'ISSUE_CERTIFICATE',
-        entityType: 'Certificate',
-        details: {
+      const res = await fetch('/api/certificates/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           workshopId: selectedWorkshopId,
-          count: publishedCount,
-        },
+          workshopTitle: workshopName || 'Workshop',
+          certificates: certPayloads,
+        }),
       });
 
-      setPublishSuccessCount(publishedCount);
-      addToast(`Successfully published ${publishedCount} certificates for approved students!`, 'success');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to publish certificates.');
+      }
 
-      setZipFile(null);
-      setMatchedEntries([]);
-      setZipSummary(null);
+      const count = data.publishedCount || eligibleEntries.length;
+      setPublishSuccessCount(count);
+      addToast(`Successfully published ${count} certificates for approved students!`, 'success');
+
+      // Remove published entries from matchedEntries batch
+      setMatchedEntries((prev) => prev.filter((e) => !eligibleEntries.some((pub) => pub.id === e.id)));
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) {
       console.error('Publishing error:', err);
@@ -1022,6 +1085,7 @@ export default function TeacherDashboardPage() {
             <div className="mt-4 p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-white/10 flex flex-col lg:flex-row items-center justify-between gap-5 sm:gap-6">
               <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5 w-full">
                 <div className="p-3 bg-white rounded-2xl shadow-xl shrink-0 relative mx-auto sm:mx-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={qrCodeDataUrl}
                     alt="Permanent Session QR Code"
@@ -1340,36 +1404,49 @@ export default function TeacherDashboardPage() {
         </section>
 
         {/* ------------------------------------------------------------------ */}
-        {/* SECTION 3: ZIP CERTIFICATES UPLOAD + MATCH + PUBLISH (3D Glass Card) */}
+        {/* SECTION 3: CERTIFICATES UPLOAD, DISAMBIGUATION & PUBLISHING        */}
         {/* ------------------------------------------------------------------ */}
         <section className="card-3d-tilt glass-panel rounded-[32px] p-6 sm:p-8 border-emerald-500/30 shadow-glass space-y-6 relative overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-glow-emerald">
-                <FileArchive className="w-5 h-5" />
+                <Award className="w-5 h-5" />
               </div>
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
                   Section 03
                 </span>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-white">
-                  Bulk ZIP Ingestion &amp; Strict Disambiguation
+                  Certificate Upload &amp; Verification
                 </h2>
               </div>
             </div>
 
-            {/* Explicit Publish Button */}
-            {matchedEntries.length > 0 && (
-              <button
-                type="button"
-                onClick={handlePublishCertificates}
-                disabled={isPublishingCerts}
-                className="flex items-center gap-2 py-2 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs shadow-glow-emerald hover:-translate-y-0.5 hover:brightness-105 transition-all disabled:opacity-50"
-              >
-                <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                <span>{isPublishingCerts ? 'Publishing...' : 'Publish Approved Certificates'}</span>
-              </button>
-            )}
+            {/* Action Buttons: Clear Batch & Publish */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {matchedEntries.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearBatch}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Batch</span>
+                </button>
+              )}
+
+              {filesSummary.matched > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePublishCertificates}
+                  disabled={isPublishingCerts}
+                  className="flex items-center gap-2 py-2 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs shadow-glow-emerald hover:-translate-y-0.5 hover:brightness-105 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                  <span>{isPublishingCerts ? 'Publishing...' : `Publish Approved (${filesSummary.matched})`}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Success Banner */}
@@ -1384,16 +1461,37 @@ export default function TeacherDashboardPage() {
             </div>
           )}
 
-          {/* Upload Area */}
+          {/* Unified Drag-and-Drop / Multi-PDF / ZIP Upload Zone */}
           <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFilesUpload(e.dataTransfer.files);
+              }
+            }}
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-emerald-500/30 hover:border-emerald-400/60 rounded-3xl p-8 text-center cursor-pointer bg-white/[0.02] hover:bg-white/[0.05] transition-all space-y-3 group"
+            className={`border-2 border-dashed rounded-3xl p-8 text-center cursor-pointer transition-all space-y-3 group ${
+              isDragging
+                ? 'border-emerald-400 bg-emerald-500/10 scale-[1.01]'
+                : 'border-emerald-500/30 hover:border-emerald-400/60 bg-white/[0.02] hover:bg-white/[0.05]'
+            }`}
           >
             <input
               ref={fileInputRef}
               type="file"
-              accept=".zip"
-              onChange={handleZipFileChange}
+              multiple
+              accept=".pdf,.zip"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  handleFilesUpload(e.target.files);
+                }
+              }}
               className="hidden"
             />
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30 group-hover:scale-110 transition-transform">
@@ -1401,130 +1499,258 @@ export default function TeacherDashboardPage() {
             </div>
             <div>
               <p className="text-sm font-bold text-white">
-                {isParsingZip ? 'Parsing and matching certificates...' : 'Upload Student Certificates ZIP'}
+                {isParsingFiles ? 'Processing & matching certificates...' : 'Drop PDF Certificates or ZIP Archive Here'}
               </p>
               <p className="text-xs text-emerald-100/60 font-light mt-1">
-                Drop your .zip file containing individual PDFs (e.g., Rahul_Kumar.pdf, krishna-verma.pdf).
+                Upload individual PDFs, select multiple PDFs at once, or upload a ZIP archive.
               </p>
             </div>
-            {zipFile && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-mono font-medium">
-                <FileArchive className="w-3.5 h-3.5" />
-                {zipFile.name} ({(zipFile.size / 1024).toFixed(1)} KB)
-              </span>
-            )}
+            <div className="flex items-center justify-center gap-2 pt-1 text-[11px] text-emerald-200/70">
+              <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10">.PDF (Individual / Multi)</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10">.ZIP (Batch Archive)</span>
+            </div>
           </div>
 
-          {/* Pre-Publish Matching Report */}
+          {/* Pre-Publish Matching Report & Metrics Bar */}
           {matchedEntries.length > 0 && (
             <div className="space-y-4 pt-2">
-              {zipSummary && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/10">
-                    <span className="block text-lg font-black text-white">{zipSummary.total}</span>
-                    <span className="text-[10px] text-emerald-100/60 uppercase tracking-wider">Total Files</span>
-                  </div>
-                  <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                    <span className="block text-lg font-black text-emerald-300">{zipSummary.matched}</span>
-                    <span className="text-[10px] text-emerald-300 uppercase tracking-wider">Matched &amp; Ready</span>
-                  </div>
-                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-                    <span className="block text-lg font-black text-amber-300">{zipSummary.ambiguous}</span>
-                    <span className="text-[10px] text-amber-300 uppercase tracking-wider">Ambiguous (Needs Review)</span>
-                  </div>
-                  <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20">
-                    <span className="block text-lg font-black text-rose-300">{zipSummary.unmatched}</span>
-                    <span className="text-[10px] text-rose-300 uppercase tracking-wider">Unmatched</span>
-                  </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 text-center">
+                <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/10">
+                  <span className="block text-lg font-black text-white">{filesSummary.total}</span>
+                  <span className="text-[10px] text-emerald-100/60 uppercase tracking-wider font-semibold">Total Uploaded</span>
                 </div>
-              )}
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="block text-lg font-black text-emerald-300">{filesSummary.matched}</span>
+                  <span className="text-[10px] text-emerald-300 uppercase tracking-wider font-semibold">Matched</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
+                  <span className="block text-lg font-black text-yellow-300">{filesSummary.suggested}</span>
+                  <span className="text-[10px] text-yellow-300 uppercase tracking-wider font-semibold">Suggested Match</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                  <span className="block text-lg font-black text-amber-300">{filesSummary.ambiguous}</span>
+                  <span className="text-[10px] text-amber-300 uppercase tracking-wider font-semibold">Ambiguous</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20">
+                  <span className="block text-lg font-black text-rose-300">{filesSummary.unmatched}</span>
+                  <span className="text-[10px] text-rose-300 uppercase tracking-wider font-semibold">Unmatched</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-500/10 border border-slate-500/20">
+                  <span className="block text-lg font-black text-slate-300">{filesSummary.failed}</span>
+                  <span className="text-[10px] text-slate-300 uppercase tracking-wider font-semibold">Failed</span>
+                </div>
+              </div>
 
-              {/* Matched Preview List with Attendance Eligibility Check */}
-              <div className="max-h-80 overflow-y-auto rounded-2xl border border-white/10 divide-y divide-white/[0.05]">
-                {matchedEntries.map((entry, idx) => {
-                  const eligibility = checkEligibility(entry.matchedStudentId);
-                  const isAmbiguous = entry.status === 'ambiguous';
-                  const isUnmatched = entry.status === 'unmatched';
-                  const isMatched = entry.status === 'matched';
-                  const isDuplicate = entry.status === 'duplicate';
+              {/* Status Filter Tabs */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap border-b border-white/[0.06] pb-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setCertFilterTab('ALL')}
+                  className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                    certFilterTab === 'ALL'
+                      ? 'bg-white/20 text-white'
+                      : 'text-emerald-100/60 hover:text-white'
+                  }`}
+                >
+                  All ({filesSummary.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertFilterTab('matched')}
+                  className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                    certFilterTab === 'matched'
+                      ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500/40'
+                      : 'text-emerald-300/70 hover:text-emerald-200'
+                  }`}
+                >
+                  Matched ({filesSummary.matched})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertFilterTab('suggested')}
+                  className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                    certFilterTab === 'suggested'
+                      ? 'bg-yellow-500/30 text-yellow-200 border border-yellow-500/40'
+                      : 'text-yellow-300/70 hover:text-yellow-200'
+                  }`}
+                >
+                  Suggested ({filesSummary.suggested})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertFilterTab('ambiguous')}
+                  className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                    certFilterTab === 'ambiguous'
+                      ? 'bg-amber-500/30 text-amber-200 border border-amber-500/40'
+                      : 'text-amber-300/70 hover:text-amber-200'
+                  }`}
+                >
+                  Ambiguous ({filesSummary.ambiguous})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertFilterTab('unmatched')}
+                  className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                    certFilterTab === 'unmatched'
+                      ? 'bg-rose-500/30 text-rose-200 border border-rose-500/40'
+                      : 'text-rose-300/70 hover:text-rose-200'
+                  }`}
+                >
+                  Unmatched ({filesSummary.unmatched})
+                </button>
+                {filesSummary.failed > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCertFilterTab('failed')}
+                    className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                      certFilterTab === 'failed'
+                        ? 'bg-slate-500/30 text-slate-200 border border-slate-500/40'
+                        : 'text-slate-300/70 hover:text-slate-200'
+                    }`}
+                  >
+                    Failed ({filesSummary.failed})
+                  </button>
+                )}
+              </div>
 
-                  return (
-                    <div
-                      key={idx}
-                      className="p-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-white/[0.02]"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-white">{entry.fileName}</span>
-                            {entry.manualMappingApproved && (
-                              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                                Manual Map Verified by {entry.manualMappingApprovedBy}
-                              </span>
+              {/* Uploaded Files Table List */}
+              <div className="max-h-96 overflow-y-auto rounded-2xl border border-white/10 divide-y divide-white/[0.05]">
+                {matchedEntries
+                  .filter((entry) => {
+                    if (certFilterTab === 'ALL') return true;
+                    if (certFilterTab === 'failed') return entry.status === 'failed' || entry.status === 'duplicate';
+                    return entry.status === certFilterTab;
+                  })
+                  .map((entry, idx) => {
+                    const eligibility = checkEligibility(entry.matchedStudentId);
+                    const isMatched = entry.status === 'matched';
+                    const isSuggested = entry.status === 'suggested';
+                    const isAmbiguous = entry.status === 'ambiguous';
+                    const isUnmatched = entry.status === 'unmatched';
+                    const isFailed = entry.status === 'failed' || entry.status === 'duplicate';
+
+                    return (
+                      <div
+                        key={entry.id || idx}
+                        className="p-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-white/[0.02]"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <FileText className="w-5 h-5 text-emerald-400 shrink-0" />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono font-semibold text-white truncate max-w-xs">{entry.fileName}</span>
+                              <span className="text-[10px] text-emerald-100/50">({(entry.fileSize / 1024).toFixed(1)} KB)</span>
+                              {entry.manualMappingApproved && (
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                                  Manual Verified
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Status Sub-details */}
+                            {isMatched && entry.matchedStudentName ? (
+                              <p className="text-emerald-300/90 text-[11px] mt-0.5">
+                                &rarr; Assigned: <strong>{entry.matchedStudentName}</strong>
+                              </p>
+                            ) : isSuggested && entry.suggestedStudentName ? (
+                              <p className="text-yellow-300/90 text-[11px] mt-0.5 flex items-center gap-1.5">
+                                <span>&rarr; Suggested Single Match: <strong>{entry.suggestedStudentName}</strong></span>
+                              </p>
+                            ) : isAmbiguous ? (
+                              <p className="text-amber-300/90 text-[11px] mt-0.5 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>{entry.errorMessage || 'Multiple matching students found. Manual review required.'}</span>
+                              </p>
+                            ) : isFailed ? (
+                              <p className="text-rose-400 text-[11px] mt-0.5">
+                                {entry.errorMessage || 'Invalid or duplicate file.'}
+                              </p>
+                            ) : (
+                              <p className="text-rose-300/80 text-[11px] mt-0.5">
+                                {entry.errorMessage || 'No eligible approved student matched this filename.'}
+                              </p>
                             )}
                           </div>
-                          {isMatched && entry.matchedStudentName ? (
-                            <p className="text-emerald-300/90 text-[11px] mt-0.5">
-                              &rarr; Assigned: <strong>{entry.matchedStudentName}</strong>
-                            </p>
-                          ) : isAmbiguous ? (
-                            <p className="text-amber-300/90 text-[11px] mt-0.5 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3 text-amber-400" />
-                              <span>{entry.errorMessage || 'Duplicate student name detected. Manual review required.'}</span>
-                            </p>
-                          ) : (
-                            <p className="text-rose-300/80 text-[11px] mt-0.5">
-                              {entry.errorMessage || 'No registered student matched this filename.'}
-                            </p>
-                          )}
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        {/* Attendance Eligibility Badge for Matched */}
-                        {isMatched && (
-                          eligibility.eligible ? (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              Attendance Approved
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                              {eligibility.reason}
-                            </span>
-                          )
-                        )}
+                        {/* Status Badges & Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap shrink-0">
+                          {/* Attendance Eligibility Badge for Matched */}
+                          {isMatched && (
+                            eligibility.eligible ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                Attendance Approved
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                {eligibility.reason}
+                              </span>
+                            )
+                          )}
 
-                        {/* Status Badge */}
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            isMatched
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                              : isAmbiguous
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                              : isDuplicate
-                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                          }`}
-                        >
-                          {entry.status}
-                        </span>
+                          {/* Status Badge */}
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              isMatched
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : isSuggested
+                                ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                                : isAmbiguous
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            }`}
+                          >
+                            {entry.status}
+                          </span>
 
-                        {/* Action: Open Disambiguation Modal for Ambiguous or Unmatched */}
-                        {(isAmbiguous || isUnmatched) && (
+                          {/* Suggested Match: Quick Confirm Button */}
+                          {isSuggested && (
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmSuggestedMatch(entry.id)}
+                              className="px-2.5 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/40 text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                              title="Confirm suggested single match"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Confirm Match</span>
+                            </button>
+                          )}
+
+                          {/* Select Student Button for Ambiguous or Unmatched */}
+                          {(isAmbiguous || isUnmatched) && (
+                            <button
+                              type="button"
+                              onClick={() => openDisambiguationModal(entry, idx)}
+                              className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>Select Student</span>
+                            </button>
+                          )}
+
+                          {/* Preview PDF Button */}
                           <button
                             type="button"
-                            onClick={() => openDisambiguationModal(entry, idx)}
-                            className="px-3 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-[11px] font-semibold transition-all flex items-center gap-1"
+                            onClick={() => openPreviewModal(entry)}
+                            className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-emerald-200 border border-white/10 text-xs transition-colors cursor-pointer"
+                            title="Preview PDF Certificate"
                           >
-                            <UserCheck className="w-3.5 h-3.5" />
-                            <span>Select Student</span>
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
-                        )}
+
+                          {/* Remove File Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEntry(entry.id, entry.fileName)}
+                            className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-rose-500/20 text-rose-300 border border-white/10 text-xs transition-colors cursor-pointer"
+                            title="Remove file from upload batch"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -1532,7 +1758,53 @@ export default function TeacherDashboardPage() {
       </div>
 
       {/* -------------------------------------------------------------------- */}
-      {/* MANUAL DISAMBIGUATION MODAL FOR DUPLICATE / AMBIGUOUS NAMES */}
+      {/* PDF PREVIEW MODAL                                                    */}
+      {/* -------------------------------------------------------------------- */}
+      {previewPdfBlob && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel rounded-3xl max-w-4xl w-full p-5 border-emerald-500/30 shadow-2xl space-y-4 max-h-[95vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white truncate max-w-md">
+                  Preview: {previewPdfBlob.fileName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closePreviewModal}
+                className="p-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-emerald-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 w-full h-[70vh] bg-slate-900 rounded-2xl overflow-hidden border border-white/10">
+              <object
+                data={previewPdfBlob.url}
+                type="application/pdf"
+                className="w-full h-full"
+              >
+                <div className="p-8 text-center text-xs text-emerald-100/70 space-y-2">
+                  <p>PDF preview is not supported by your browser viewer.</p>
+                  <a
+                    href={previewPdfBlob.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open PDF in New Window</span>
+                  </a>
+                </div>
+              </object>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------------- */}
+      {/* MANUAL DISAMBIGUATION MODAL (CLEAN SELECTION: APPROVED STUDENTS ONLY) */}
       {/* -------------------------------------------------------------------- */}
       {disambiguateEntry && disambiguateIndex !== null && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 xs:p-4 overflow-y-auto">
@@ -1540,104 +1812,91 @@ export default function TeacherDashboardPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400">
-                  Strict Manual Disambiguation
+                  Strict Manual Student Selection
                 </span>
                 <h3 className="text-lg sm:text-xl font-extrabold text-white mt-0.5 break-words">
-                  Resolve Student for &quot;{disambiguateEntry.fileName}&quot;
+                  Assign Student to &quot;{disambiguateEntry.fileName}&quot;
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={closeDisambiguationModal}
-                className="p-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-emerald-200 shrink-0"
+                className="p-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-emerald-200 shrink-0 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Warning banner */}
+            {/* Verification Policy Banner */}
             <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <p className="leading-relaxed">
-                <strong>Identity Verification Policy:</strong> Name similarity alone is not sufficient to confirm student identity. Review masked credentials and attendance approval status carefully before selecting the recipient.
+                <strong>Identity Verification Policy:</strong> Only students belonging to this workshop with <strong>APPROVED</strong> attendance are eligible. Review masked credentials carefully before confirming mapping.
               </p>
             </div>
 
-            {/* Candidates List */}
+            {/* Eligible Approved Students Candidates List */}
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               <label className="block text-xs font-semibold text-emerald-100/80">
-                Matching Student Candidates ({disambiguateEntry.potentialMatches.length > 0 ? disambiguateEntry.potentialMatches.length : students.length} options):
+                Eligible Workshop Students ({eligibleApprovedStudents.length} approved attendees):
               </label>
 
-              {(disambiguateEntry.potentialMatches.length > 0
-                ? disambiguateEntry.potentialMatches
-                : students
-              ).map((cand) => {
-                const attStatus = getStudentAttendanceStatus(cand.id);
-                const isSelected = selectedCandidateId === cand.id;
-                const conflict = checkCandidateConflict(cand.id);
+              {eligibleApprovedStudents.length === 0 ? (
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 text-center text-xs text-amber-300">
+                  No attendance-approved students found for this workshop session. Please approve student attendance in Section 2 first!
+                </div>
+              ) : (
+                eligibleApprovedStudents.map((cand) => {
+                  const isSelected = selectedCandidateId === cand.id;
+                  const conflict = checkCandidateConflict(cand.id);
 
-                return (
-                  <div
-                    key={cand.id}
-                    onClick={() => setSelectedCandidateId(cand.id)}
-                    className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                      isSelected
-                        ? 'bg-teal-500/15 border-teal-400 shadow-glow-emerald'
-                        : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06]'
-                    }`}
-                  >
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-white">{cand.name}</span>
-                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/[0.08] text-teal-300">
-                          ID: {cand.id} ({cand.regNo})
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 sm:gap-3 text-xs text-emerald-100/60 font-mono flex-wrap">
-                        <span>Email: {maskEmail(cand.email)}</span>
-                        <span className="hidden sm:inline">•</span>
-                        <span>Mobile: {maskPhone(cand.phone)}</span>
-                      </div>
-
-                      {conflict.conflict && (
-                        <p className="text-[11px] text-amber-300 font-semibold mt-1">
-                          ⚠ {conflict.reason}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 pt-1 sm:pt-0 border-t sm:border-t-0 border-white/[0.06]">
-                      <div>
-                        {attStatus === 'APPROVED' || attStatus === 'Present' || attStatus === 'CERTIFICATE_ELIGIBLE' ? (
+                  return (
+                    <div
+                      key={cand.id}
+                      onClick={() => setSelectedCandidateId(cand.id)}
+                      className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'bg-teal-500/15 border-teal-400 shadow-glow-emerald'
+                          : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-white">{cand.name}</span>
+                          <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/[0.08] text-teal-300">
+                            ID: {cand.id} ({cand.regNo})
+                          </span>
                           <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
                             Attendance Approved
                           </span>
-                        ) : attStatus === 'PENDING_REVIEW' ? (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                            Pending Review
-                          </span>
-                        ) : attStatus === 'REJECTED' ? (
-                          <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold border border-rose-500/30">
-                            Rejected
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-white/[0.06] text-emerald-100/40 text-[10px] font-bold">
-                            No Attendance Record
-                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 sm:gap-3 text-xs text-emerald-100/60 font-mono flex-wrap">
+                          <span>Email: {maskEmail(cand.email)}</span>
+                          <span className="hidden sm:inline">•</span>
+                          <span>Mobile: {maskPhone(cand.phone)}</span>
+                        </div>
+
+                        {conflict.conflict && (
+                          <p className="text-[11px] text-amber-300 font-semibold mt-1">
+                            ⚠ {conflict.reason}
+                          </p>
                         )}
                       </div>
 
-                      <input
-                        type="radio"
-                        checked={isSelected}
-                        onChange={() => setSelectedCandidateId(cand.id)}
-                        className="accent-teal-400 w-4 h-4 cursor-pointer"
-                      />
+                      <div className="shrink-0 flex items-center justify-end">
+                        <input
+                          type="radio"
+                          name="selected_student_candidate"
+                          checked={isSelected}
+                          onChange={() => setSelectedCandidateId(cand.id)}
+                          className="accent-teal-400 w-4 h-4 cursor-pointer"
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             {/* Checkboxes for conflict override & explicit confirmation */}
@@ -1674,7 +1933,7 @@ export default function TeacherDashboardPage() {
               <button
                 type="button"
                 onClick={closeDisambiguationModal}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-emerald-200 transition-colors text-center"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-emerald-200 transition-colors text-center cursor-pointer"
               >
                 Cancel
               </button>
@@ -1686,7 +1945,7 @@ export default function TeacherDashboardPage() {
                   !explicitConfirmation ||
                   (checkCandidateConflict(selectedCandidateId).conflict && !adminOverrideConflict)
                 }
-                className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 text-xs font-bold shadow-glow-emerald disabled:opacity-40 transition-all text-center"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 text-xs font-bold shadow-glow-emerald disabled:opacity-40 transition-all text-center cursor-pointer"
               >
                 Confirm Verified Mapping
               </button>

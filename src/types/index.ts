@@ -96,7 +96,7 @@ export interface Certificate {
   fileName?: string;
 }
 
-export type ZipItemMatchStatus = 'matched' | 'suggested' | 'ambiguous' | 'unmatched' | 'duplicate';
+export type ZipItemMatchStatus = 'matched' | 'suggested' | 'ambiguous' | 'unmatched' | 'duplicate' | 'failed';
 
 export interface BulkZipEntry {
   id: string;
@@ -106,6 +106,8 @@ export interface BulkZipEntry {
   fileSize: number;
   matchedStudentId: string | null;
   matchedStudentName: string | null;
+  suggestedStudentId?: string;
+  suggestedStudentName?: string;
   status: ZipItemMatchStatus;
   confidence: number;
   errorMessage?: string;
