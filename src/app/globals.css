@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #08140c;
+  --foreground: #ecfdf5;
+}
+
+*, *::before, *::after {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glassmorphism Classes matching reference visual design */
+.glass-panel {
+  background: rgba(14, 30, 20, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(110, 231, 183, 0.2);
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  /* Explicit transitions prevent continuous backdrop re-rasterization blur during hover */
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+  isolation: isolate;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.glass-panel:hover {
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow: 0 30px 70px -10px rgba(0, 0, 0, 0.7), 0 0 25px rgba(16, 185, 129, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+}
+
+.glass-input {
+  background: rgba(8, 20, 13, 0.6);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  color: #ffffff;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-input:focus {
+  border-color: #34d399;
+  background: rgba(11, 27, 18, 0.85);
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.25);
+  outline: none;
+}
+
+/* 3D Perspective and Elevation without Text Blurriness */
+.perspective-container {
+  perspective: 1200px;
+}
+
+/* 3D Floating Cards: Clean Y-axis translation avoids non-integer scale blur on fonts */
+.card-3d-tilt {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, box-shadow;
+}
+
+.card-3d-tilt:hover {
+  /* Elevated 3D depth using integer translateY + realistic layered shadow (ZERO font bitmap stretching) */
+  transform: translate3d(0, -4px, 0);
+  box-shadow: 0 32px 75px -12px rgba(0, 0, 0, 0.75), 0 0 25px rgba(16, 185, 129, 0.18), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+}
+
+/* Isolate all typography within 3D cards in their own rendering plane */
+.card-3d-tilt h1,
+.card-3d-tilt h2,
+.card-3d-tilt h3,
+.card-3d-tilt h4,
+.card-3d-tilt p,
+.card-3d-tilt span,
+.card-3d-tilt label,
+.card-3d-tilt input,
+.card-3d-tilt textarea,
+.card-3d-tilt button,
+.card-3d-tilt table,
+.card-3d-tilt td,
+.card-3d-tilt th {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Buttons and interactive elements sharpness guarantee */
+button, a {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Ambient Radial Glows */
+.ambient-glow {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(100px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Reduced motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .card-3d-tilt,
+  .card-3d-tilt:hover,
+  .animate-float-slow,
+  .animate-pulse-subtle {
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(7, 17, 11, 0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(36, 90, 58, 0.6);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 211, 153, 0.6);
+}
+
+/* Print styling for certificates */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-certificate, #printable-certificate * {
+    visibility: visible;
+  }
+  #printable-certificate {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+}
