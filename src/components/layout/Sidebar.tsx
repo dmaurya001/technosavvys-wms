@@ -88,22 +88,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, onCloseMob
         }`}
       >
         {/* Brand Header */}
-        <div className="h-16 px-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="h-16 px-6 border-b border-[rgba(245,197,66,0.2)] bg-[#04201c] flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-xl bg-[#0a2318] border border-[#f5b335]/40 p-0.5 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain rounded-xl" />
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#f5c542] to-[#2ee6a6] border-2 border-[#f5e6d3] p-0.5 flex items-center justify-center shadow-[0_0_12px_rgba(245,197,66,0.4)] group-hover:scale-105 transition-transform shrink-0">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-base tracking-tight text-slate-900 dark:text-white">
-                  Technosavvys
-                </span>
-                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300 uppercase tracking-wider">
-                  PRO
+                <span className="font-extrabold text-base tracking-tight text-white">
+                  technosavvys
                 </span>
               </div>
-              <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                Workshop Management
+              <p className="text-[11px] italic text-[#d6f5ec]">
+                creating smarter tomorrow!
               </p>
             </div>
           </Link>

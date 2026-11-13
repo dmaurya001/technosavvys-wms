@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import AppHeader from '@/components/layout/AppHeader';
 import InactivityTracker from '@/components/InactivityTracker';
 import {
   Award,
@@ -175,40 +176,32 @@ export default function StudentPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-forest-950 text-emerald-50 relative overflow-hidden antialiased">
+    <div className="tech-page-bg relative overflow-hidden antialiased">
       {/* 3D Atmospheric Emerald Lighting Layers */}
       <div className="ambient-glow -top-40 -left-40 w-[700px] h-[700px] bg-teal-500/15 animate-pulse-subtle" />
       <div className="ambient-glow -bottom-40 -right-40 w-[700px] h-[700px] bg-emerald-500/12" />
 
-      {/* Main Student Container */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 space-y-8">
-        {/* Top Navbar */}
-        <header className="glass-panel rounded-3xl p-4 sm:p-5 flex items-center justify-between border-emerald-500/25 shadow-glass">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="w-10 h-10 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-0.5 flex items-center justify-center shadow-glow-emerald shrink-0 hover:scale-105 transition-transform">
-              <img src="/logo.png" alt="Technosavvys Logo" className="w-full h-full object-contain rounded-full" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-extrabold text-white">Technosavvys</span>
-                <span className="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 text-[10px] font-bold">
-                  Student Portal
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-100/60 font-light">
-                Verified Academic Credentials &amp; Attendance
-              </p>
-            </div>
-          </div>
-
+      {/* Branded Official Header */}
+      <AppHeader roleBadge="Student Portal" badgeColor="teal">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/#portals"
+            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
+          >
+            Home
+          </Link>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-xs font-semibold text-emerald-200 hover:text-rose-200 transition-all"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-xs font-semibold text-emerald-200 hover:text-rose-200 transition-all cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
           </button>
-        </header>
+        </div>
+      </AppHeader>
+
+      {/* Main Student Container */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 space-y-8">
 
         {/* Student Profile Card (3D Floating Glass) */}
         <section className="card-3d-tilt glass-panel rounded-[32px] p-6 sm:p-8 border-teal-500/30 shadow-glass relative overflow-hidden">

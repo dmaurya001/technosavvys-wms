@@ -86,21 +86,25 @@ export const Header: React.FC<HeaderProps> = ({
   const recentAttendance = attendance.slice(0, 4);
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4">
-      {/* Mobile toggle and Title/Breadcrumb */}
+    <header className="sticky top-0 z-30 h-16 bg-[#04201c]/95 backdrop-blur-md border-b border-[rgba(245,197,66,0.25)] px-4 sm:px-6 flex items-center justify-between gap-4 text-white">
+      {/* Mobile toggle and Brand with Tagline */}
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenMobile}
-          className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
-          <span>Technosavvys</span>
-          <span>/</span>
-          <span className="text-slate-800 dark:text-slate-200 font-semibold">Enterprise Hub</span>
-        </div>
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f5c542] to-[#2ee6a6] border-2 border-[#f5e6d3] p-0.5 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(245,197,66,0.4)]">
+            <img src="/logo.png" alt="logo" className="w-full h-full object-cover rounded-full" />
+          </div>
+          <div className="hidden sm:block">
+            <h2 className="text-sm font-extrabold text-white leading-tight">technosavvys</h2>
+            <p className="text-[10px] italic text-[#d6f5ec] leading-tight">creating smarter tomorrow!</p>
+          </div>
+        </Link>
       </div>
 
       {/* Global Search Bar */}

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
+import AppHeader from '@/components/layout/AppHeader';
 import { useApp } from '@/context/AppContext';
 import InactivityTracker from '@/components/InactivityTracker';
 import {
@@ -978,71 +979,55 @@ export default function TeacherDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-forest-950 text-emerald-50 relative overflow-hidden antialiased">
+    <div className="tech-page-bg relative overflow-hidden antialiased">
       {/* 3D Atmospheric Emerald Lighting Layers */}
       <div className="ambient-glow -top-40 -left-40 w-[700px] h-[700px] bg-emerald-500/15 animate-pulse-subtle" />
       <div className="ambient-glow -bottom-40 -right-40 w-[700px] h-[700px] bg-teal-500/12" />
       <div className="ambient-glow top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-emerald-600/10" />
 
+      {/* Official Branded Full-Width Header */}
+      <AppHeader roleBadge="Teacher Console" badgeColor="gold">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+          <button
+            onClick={() => setIsNewWorkshopModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-[#f5c542] hover:bg-[#e5b532] text-[#04201c] text-xs font-bold transition-all text-center cursor-pointer shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">New Workshop</span>
+          </button>
+          <Link
+            href="/certificates"
+            target="_blank"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/20 text-xs font-semibold text-white transition-all text-center"
+          >
+            <Award className="w-3.5 h-3.5 shrink-0 text-[#2ee6a6]" />
+            <span className="truncate">Public Portal</span>
+          </Link>
+          <button
+            onClick={() => {
+              setCurrentPassword('');
+              setNewPassword('');
+              setConfirmPassword('');
+              setPasswordChangeStatus(null);
+              setShowSettingsModal(true);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-[#f5c542]/20 border border-white/10 hover:border-[#f5c542]/40 text-xs font-semibold text-white transition-all text-center cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5 text-[#f5c542] shrink-0" />
+            <span className="truncate">Settings</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-xs font-semibold text-emerald-100 hover:text-rose-200 transition-all text-center cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </AppHeader>
+
       {/* Main Container */}
       <div className="max-w-6xl mx-auto px-3 xs:px-4 sm:px-6 lg:px-8 py-5 sm:py-8 relative z-10 space-y-6 sm:space-y-8">
-        {/* Navigation & Header */}
-        <header className="glass-panel rounded-2xl sm:rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-emerald-500/25 shadow-glass">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="w-10 h-10 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-0.5 flex items-center justify-center shadow-glow-emerald shrink-0 hover:scale-105 transition-transform">
-              <img src="/logo.png" alt="Technosavvys Logo" className="w-full h-full object-contain rounded-full" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-extrabold text-white">Technosavvys</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                  Teacher Console
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-100/60 font-light">
-                Dynamic QR Attendance, Approval Workflow &amp; Strict Certificate Matching
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-            <button
-              onClick={() => setIsNewWorkshopModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-xs font-bold text-emerald-200 transition-all text-center cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-              <span className="truncate">New Workshop</span>
-            </button>
-            <Link
-              href="/certificates"
-              target="_blank"
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-xs font-semibold text-teal-300 transition-all text-center"
-            >
-              <Award className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Public Portal</span>
-            </Link>
-            <button
-              onClick={() => {
-                setCurrentPassword('');
-                setNewPassword('');
-                setConfirmPassword('');
-                setPasswordChangeStatus(null);
-                setShowSettingsModal(true);
-              }}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full bg-white/[0.06] hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/30 text-xs font-semibold text-emerald-200 transition-all text-center"
-            >
-              <Settings className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="truncate">Settings</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-xs font-semibold text-emerald-200 hover:text-rose-200 transition-all text-center"
-            >
-              <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </header>
 
         {/* ------------------------------------------------------------------ */}
         {/* SECTION 1: WORKSHOP CREATION & DYNAMIC ROTATING QR (3D Glass Card) */}

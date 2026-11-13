@@ -20,6 +20,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
+import AppHeader from '@/components/layout/AppHeader';
 
 function CheckInForm({ sessionId }: { sessionId: string }) {
   const searchParams = useSearchParams();
@@ -187,30 +188,37 @@ function CheckInForm({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <div className="min-h-screen bg-forest-950 text-emerald-50 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden antialiased">
+    <div className="tech-page-bg flex flex-col min-h-screen relative overflow-hidden antialiased">
       {/* 3D Forest Emerald Lighting */}
       <div className="ambient-glow -top-32 -left-32 w-[600px] h-[600px] bg-emerald-500/15 animate-pulse-subtle" />
       <div className="ambient-glow -bottom-32 -right-32 w-[600px] h-[600px] bg-teal-500/12" />
 
-      <div className="w-full max-w-lg relative z-10 space-y-6">
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <Link href="/" className="inline-block hover:scale-105 transition-transform mb-1">
-            <div className="w-14 h-14 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-1 mx-auto shadow-[0_0_20px_rgba(245,179,53,0.3)] flex items-center justify-center">
-              <img src="/logo.png" alt="Technosavvys Logo" className="w-full h-full object-contain rounded-full" />
-            </div>
+      {/* Official Branded Header */}
+      <AppHeader roleBadge="QR Check-In" badgeColor="emerald">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
+          >
+            Home
           </Link>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-xs font-semibold shadow-glow-emerald backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Technosavvys Dynamic QR Check-In</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            Register Session Attendance
-          </h1>
-          <p className="text-xs text-emerald-100/60 font-light max-w-md mx-auto">
-            Dynamic QR verification enabled. Attendance will be submitted with initial status PENDING_REVIEW.
-          </p>
+          <Link href="/student/portal" className="pbtn text-xs">
+            Student Portal &rarr;
+          </Link>
         </div>
+      </AppHeader>
+
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 relative z-10">
+        <div className="w-full max-w-lg space-y-6">
+          {/* Header Description */}
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              Register Session Attendance
+            </h1>
+            <p className="text-xs text-emerald-100/60 font-light max-w-md mx-auto">
+              Dynamic QR verification enabled. Attendance will be submitted with initial status PENDING_REVIEW.
+            </p>
+          </div>
 
         {/* 3D Glass Workshop Session Info Card */}
         <div suppressHydrationWarning className="card-3d-tilt glass-panel rounded-3xl p-5 border-emerald-500/25 space-y-3 relative overflow-hidden">
@@ -440,6 +448,7 @@ function CheckInForm({ sessionId }: { sessionId: string }) {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
+import AppHeader from '@/components/layout/AppHeader';
 import {
   Award,
   Sparkles,
@@ -141,30 +142,37 @@ function CertificatePortalContent() {
   };
 
   return (
-    <div className="min-h-screen bg-forest-950 text-emerald-50 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden antialiased">
+    <div className="tech-page-bg flex flex-col min-h-screen relative overflow-hidden antialiased">
       {/* 3D Atmospheric Emerald Lighting Layers */}
       <div className="ambient-glow -top-32 -left-32 w-[650px] h-[650px] bg-teal-500/15 animate-pulse-subtle" />
       <div className="ambient-glow -bottom-32 -right-32 w-[600px] h-[600px] bg-emerald-500/12" />
 
-      <div className="w-full max-w-xl relative z-10 space-y-6">
-        {/* Technosavvys Branding Header */}
-        <div className="text-center space-y-2.5">
-          <Link href="/" className="inline-block hover:scale-105 transition-transform">
-            <div className="w-16 h-16 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-1 mx-auto shadow-[0_0_20px_rgba(245,179,53,0.3)] flex items-center justify-center">
-              <img src="/logo.png" alt="Technosavvys Logo" className="w-full h-full object-contain rounded-full" />
-            </div>
+      {/* Official Branded Header */}
+      <AppHeader roleBadge="Certificates" badgeColor="gold">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
+          >
+            Home
           </Link>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-xs font-semibold shadow-glow-emerald backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Technosavvys Public Credential Portal</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-            Find &amp; Download Certificates
-          </h1>
-          <p className="text-xs sm:text-sm text-emerald-100/60 font-light max-w-md mx-auto">
-            Official workshop certificate distribution. Enter your registered name and email to view and download authenticated digital credentials.
-          </p>
+          <Link href="/#portals" className="pbtn text-xs">
+            Login Portal &rarr;
+          </Link>
         </div>
+      </AppHeader>
+
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 relative z-10">
+        <div className="w-full max-w-xl space-y-6">
+          {/* Header Description */}
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+              Find &amp; Download Certificates
+            </h1>
+            <p className="text-xs sm:text-sm text-emerald-100/60 font-light max-w-md mx-auto">
+              Official workshop certificate distribution. Enter your registered name and email to view and download authenticated digital credentials.
+            </p>
+          </div>
 
         {/* 3D Glassmorphism Portal Card */}
         <div className="card-3d-tilt glass-panel rounded-[32px] p-6 sm:p-8 shadow-glass relative border-emerald-500/30">
@@ -349,6 +357,7 @@ function CertificatePortalContent() {
         <p className="text-[11px] text-center text-emerald-100/40 font-light">
           Technosavvys Academic Systems • Cryptographic Token Verification &amp; Private Storage
         </p>
+        </div>
       </div>
     </div>
   );

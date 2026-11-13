@@ -3,6 +3,7 @@
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import AppHeader from '@/components/layout/AppHeader';
 import {
   Award,
   ShieldCheck,
@@ -106,41 +107,37 @@ function StudentLoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-forest-950 text-emerald-50 flex items-center justify-center p-4 relative overflow-hidden antialiased">
+    <div className="tech-page-bg flex flex-col min-h-screen relative overflow-hidden antialiased">
       {/* 3D Atmospheric Emerald Lighting Layers */}
       <div className="ambient-glow -top-32 -left-32 w-[650px] h-[650px] bg-teal-500/15 animate-pulse-subtle" />
       <div className="ambient-glow -bottom-32 -right-32 w-[600px] h-[600px] bg-emerald-500/12" />
 
-      <div className="w-full max-w-md relative z-10 space-y-6">
-        {/* Back Link */}
-        <div>
+      {/* Official Branded Header */}
+      <AppHeader roleBadge="Student Portal" badgeColor="teal">
+        <div className="flex items-center gap-3">
           <Link
-            href="/#portals"
-            className="inline-flex items-center gap-2 text-xs text-teal-300/80 hover:text-white transition-colors"
+            href="/"
+            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Home</span>
+            Home
+          </Link>
+          <Link href="/teacher/login" className="pbtn text-xs">
+            Admin Login &rarr;
           </Link>
         </div>
+      </AppHeader>
 
-        {/* Brand Header */}
-        <div className="text-center space-y-2.5">
-          <Link href="/" className="inline-block hover:scale-105 transition-transform">
-            <div className="w-16 h-16 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-1 mx-auto shadow-[0_0_20px_rgba(245,179,53,0.3)] flex items-center justify-center">
-              <img src="/logo.png" alt="Technosavvys Logo" className="w-full h-full object-contain rounded-full" />
-            </div>
-          </Link>
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-950/70 border border-teal-500/30 text-teal-300 text-xs font-semibold shadow-glow-emerald backdrop-blur-md">
-            <Award className="w-3.5 h-3.5 text-teal-400" />
-            <span>Student &amp; Attendee Gateway</span>
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 relative z-10">
+        <div className="w-full max-w-md space-y-6">
+          {/* Header Description */}
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-white">
+              Student Login
+            </h1>
+            <p className="text-xs text-emerald-100/60 font-light max-w-sm mx-auto">
+              Access your verified workshop attendance history and authentic digital certificates.
+            </p>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">
-            Student Login
-          </h1>
-          <p className="text-xs text-emerald-100/60 font-light max-w-sm mx-auto">
-            Access your verified workshop attendance history and authentic digital certificates.
-          </p>
-        </div>
 
         {/* 3D Glass Login Card */}
         <div className="card-3d-tilt glass-panel rounded-[32px] p-6 sm:p-8 shadow-glass relative border-teal-500/30">
@@ -239,6 +236,7 @@ function StudentLoginContent() {
         <p className="text-[11px] text-center text-emerald-100/40 font-light">
           Technosavvys Student Cloud • Instant Name &amp; Email Credential Verification
         </p>
+        </div>
       </div>
     </div>
   );
