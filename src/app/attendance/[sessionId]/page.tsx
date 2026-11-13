@@ -86,7 +86,7 @@ function CheckInForm({ sessionId }: { sessionId: string }) {
           <p className="text-xs text-emerald-100/60 font-light">
             Session ID &quot;{sessionId}&quot; was not found in the workshop registry.
           </p>
-          <Link href="/login">
+          <Link href="/#portals">
             <button className="mt-2 px-5 py-2 text-xs font-semibold rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/20 text-white transition-all">
               Return to Portal
             </button>

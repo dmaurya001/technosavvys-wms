@@ -125,11 +125,11 @@ function TeacherLoginContent() {
         {/* Back Link */}
         <div>
           <Link
-            href="/login"
+            href="/#portals"
             className="inline-flex items-center gap-2 text-xs text-emerald-300/80 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Gateway</span>
+            <span>Back to Home</span>
           </Link>
         </div>
 

@@ -45,7 +45,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
       await supabase.auth.signOut();
     } catch {}
     document.cookie = 'technosavvys_admin_session=; path=/; max-age=0; SameSite=Lax';
-    window.location.href = '/login';
+    window.location.href = '/#portals';
   };
 
   return (

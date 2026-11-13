@@ -54,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
       entityType: 'Auth',
       details: { timestamp: new Date().toISOString() },
     });
-    router.push('/login');
+    router.push('/#portals');
   };
 
   // Close search and notif on click outside

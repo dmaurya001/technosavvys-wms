@@ -114,8 +114,15 @@ export async function updateSession(request: NextRequest) {
   const isPublicCertificates = pathname.startsWith('/certificates');
   const isLegacyPortal = pathname === '/portal';
 
-  // Handle Root route "/" & Common Login "/login" -> Always present Login Selection Gateway
-  if (isRoot || isCommonLogin) {
+  // Handle Root route "/" & Common Login "/login"
+  if (isCommonLogin) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    url.hash = 'portals';
+    return NextResponse.redirect(url);
+  }
+
+  if (isRoot) {
     return supabaseResponse;
   }
 
