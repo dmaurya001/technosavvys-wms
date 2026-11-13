@@ -313,7 +313,7 @@ export default function TeacherDashboardPage() {
       const res = await fetch(`/api/attendance?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.attendees)) {
+        if (data.success && Array.isArray(data.attendees) && data.attendees.length > 0) {
           syncAttendanceWithServer(data.attendees);
         }
       }
@@ -322,7 +322,7 @@ export default function TeacherDashboardPage() {
       const allRes = await fetch('/api/attendance');
       if (allRes.ok) {
         const allData = await allRes.json();
-        if (allData.success && Array.isArray(allData.attendees)) {
+        if (allData.success && Array.isArray(allData.attendees) && allData.attendees.length > 0) {
           syncAttendanceWithServer(allData.attendees);
         }
       }

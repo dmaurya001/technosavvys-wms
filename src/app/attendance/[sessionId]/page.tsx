@@ -162,7 +162,7 @@ function CheckInForm({ sessionId }: { sessionId: string }) {
       }
 
       // Sync into client state as well if available locally
-      if (sessionLookup) {
+      if (activeLookup) {
         recordPublicCheckIn({
           sessionId: session.id,
           fullName: fullName.trim(),

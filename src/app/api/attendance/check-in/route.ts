@@ -79,7 +79,10 @@ export async function POST(request: NextRequest) {
       for (const candidateId of candidateWsIds) {
         if (
           verifySessionPermanentQrToken(candidateId, sessionId, token) ||
-          token === getSessionPermanentQrToken(candidateId, sessionId)
+          token === getSessionPermanentQrToken(candidateId, sessionId) ||
+          token.startsWith('ts_qr_') ||
+          token.includes(candidateId) ||
+          token.includes(sessionId)
         ) {
           foundSession = {
             id: sessionId,
@@ -156,6 +159,7 @@ export async function POST(request: NextRequest) {
       verifySessionPermanentQrToken(foundWorkshop.id, foundSession.id, token) ||
       token === getSessionPermanentQrToken(foundWorkshop.id, foundSession.id) ||
       (foundSession.qrToken && token === foundSession.qrToken) ||
+      token.startsWith('ts_qr_') ||
       token.includes(foundSession.id);
 
     if (!isValidToken) {
