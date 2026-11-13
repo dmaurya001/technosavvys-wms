@@ -20,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen font-sans bg-slate-50 dark:bg-slate-950">
+      <body className="min-h-screen">
         <AppProvider>
           <DashboardLayout>{children}</DashboardLayout>
         </AppProvider>

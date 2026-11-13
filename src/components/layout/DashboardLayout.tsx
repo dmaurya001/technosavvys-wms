@@ -30,10 +30,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
   if (hasDedicatedHeader) {
     return (
-      <div className="min-h-screen bg-forest-950 text-emerald-50 flex flex-col relative overflow-hidden antialiased selection:bg-emerald-500 selection:text-slate-950">
-        {/* Background ambient lighting */}
-        <div className="ambient-glow -top-32 -left-32 w-[600px] h-[600px] bg-emerald-500/10" />
-        <div className="ambient-glow top-1/2 -right-40 w-[550px] h-[550px] bg-teal-500/10" />
+      <div className="min-h-screen text-emerald-50 flex flex-col relative overflow-hidden antialiased selection:bg-[#f5c542] selection:text-slate-950">
         <div className="relative z-10 flex-1 flex flex-col">
           {children}
         </div>
@@ -52,7 +49,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   return (
-    <div className="min-h-screen bg-forest-950 text-emerald-50 flex flex-col relative overflow-hidden antialiased selection:bg-emerald-500 selection:text-slate-950">
+    <div className="min-h-screen text-emerald-50 flex flex-col relative overflow-hidden antialiased selection:bg-[#f5c542] selection:text-slate-950">
       {/* 3D Atmospheric Emerald Lighting Layers */}
       <div className="ambient-glow -top-40 -left-32 w-[650px] h-[650px] bg-emerald-500/12 animate-pulse-subtle" />
       <div className="ambient-glow top-1/3 -right-44 w-[600px] h-[600px] bg-teal-500/10" />
