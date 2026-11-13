@@ -42,11 +42,15 @@ export async function GET(request: NextRequest) {
         cert = {
           id: data.id,
           studentId: data.student_id,
+          studentName: data.student_name || data.recipient_name,
+          studentEmail: data.student_email,
           certificateNo: data.certificate_no,
           issueDate: data.issue_date,
           grade: data.grade,
           score: data.score,
           trainer: data.trainer_name,
+          workshopTitle: data.workshop_title,
+          fileName: data.file_name,
         };
       }
     } catch {}
@@ -70,8 +74,13 @@ export async function GET(request: NextRequest) {
     // Strict Authorization Check
     const isAuthorized =
       cert.studentId === payload.studentId ||
+      cert.studentId === payload.regNo ||
       (cert.studentEmail && payload.email && cert.studentEmail.toLowerCase().trim() === payload.email.toLowerCase().trim()) ||
-      (cert.studentName && payload.name && normalizeStudentName(cert.studentName) === normalizeStudentName(payload.name));
+      (cert.studentName && payload.name && (
+        normalizeStudentName(cert.studentName) === normalizeStudentName(payload.name) ||
+        normalizeStudentName(cert.studentName).includes(normalizeStudentName(payload.name)) ||
+        normalizeStudentName(payload.name).includes(normalizeStudentName(cert.studentName))
+      ));
 
     if (!isAuthorized) {
       return new NextResponse('Forbidden: Access Denied to unauthorized certificate.', { status: 403 });

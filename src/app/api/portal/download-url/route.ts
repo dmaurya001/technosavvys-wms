@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       const supabaseAdmin = createAdminClient();
       const { data, error } = await supabaseAdmin
         .from('certificates')
-        .select('id, student_id, certificate_no, storage_path, file_name')
+        .select('*')
         .eq('id', certificateId)
         .single();
 
@@ -100,6 +100,8 @@ export async function POST(request: NextRequest) {
         certRecord = {
           id: data.id,
           studentId: data.student_id,
+          studentName: data.student_name || data.recipient_name,
+          studentEmail: data.student_email,
           certificateNo: data.certificate_no,
           storagePath: data.storage_path,
           fileName: data.file_name,
@@ -152,8 +154,13 @@ export async function POST(request: NextRequest) {
     // STRICT AUTHORIZATION CHECK (Prevent Unauthorized Access / IDOR)
     const isAuthorized =
       certRecord.studentId === studentId ||
+      certRecord.studentId === sessionPayload.regNo ||
       (certRecord.studentEmail && sessionPayload.email && certRecord.studentEmail.toLowerCase().trim() === sessionPayload.email.toLowerCase().trim()) ||
-      ((certRecord as any).studentName && sessionPayload.name && normalizeStudentName((certRecord as any).studentName) === normalizeStudentName(sessionPayload.name));
+      ((certRecord as any).studentName && sessionPayload.name && (
+        normalizeStudentName((certRecord as any).studentName) === normalizeStudentName(sessionPayload.name) ||
+        normalizeStudentName((certRecord as any).studentName).includes(normalizeStudentName(sessionPayload.name)) ||
+        normalizeStudentName(sessionPayload.name).includes(normalizeStudentName((certRecord as any).studentName))
+      ));
 
     if (!isAuthorized) {
       await logAuditEvent({
