@@ -17,3 +17,6 @@ scratch/
 backups/
 data/backups/
 
+
+.vercel
+.env*

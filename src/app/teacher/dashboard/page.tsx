@@ -70,7 +70,15 @@ export default function TeacherDashboardPage() {
   // --------------------------------------------------------------------------
   // SECTION 1: WORKSHOP STATE & PERMANENT SESSION QR CODE (STABLE PER SESSION)
   // --------------------------------------------------------------------------
-  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>(workshops[0]?.id || '');
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('technosavvys_active_ws_id');
+        if (stored) return stored;
+      } catch {}
+    }
+    return workshops[0]?.id || '';
+  });
   const [workshopName, setWorkshopName] = useState(workshops[0]?.title || '');
   const [workshopDate, setWorkshopDate] = useState(workshops[0]?.date || new Date().toISOString().split('T')[0]);
   const [workshopTime, setWorkshopTime] = useState(workshops[0]?.time || '10:00 AM - 05:00 PM');
@@ -92,8 +100,19 @@ export default function TeacherDashboardPage() {
     }
   }, []);
 
+  // Persist selected workshop ID across page refreshes
+  useEffect(() => {
+    if (selectedWorkshopId && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('technosavvys_active_ws_id', selectedWorkshopId);
+      } catch {}
+    }
+  }, [selectedWorkshopId]);
+
   // Sync selected workshop details & resolve permanent session QR token
   useEffect(() => {
+    if (workshops.length === 0) return;
+
     const ws = workshops.find((w) => w.id === selectedWorkshopId);
     if (ws) {
       setWorkshopName(ws.title);
@@ -118,12 +137,6 @@ export default function TeacherDashboardPage() {
         setActiveSession(first.sessions[0]);
         setQrToken(first.sessions[0].qrToken || getSessionPermanentQrToken(first.id, first.sessions[0].id));
       }
-    } else {
-      setSelectedWorkshopId('');
-      setWorkshopName('');
-      setActiveSession(null);
-      setQrToken('');
-      setQrCodeDataUrl('');
     }
   }, [selectedWorkshopId, workshops]);
 

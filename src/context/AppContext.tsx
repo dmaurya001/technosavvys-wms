@@ -64,58 +64,23 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [workshops, setWorkshops] = useState<Workshop[]>([]);
-
-  useEffect(() => {
-    let isMounted = true;
-    async function loadWorkshops() {
+  // Helper to persist workshops
+  const persistWorkshops = (items: Workshop[]) => {
+    if (typeof window !== 'undefined') {
       try {
-        const res = await fetch('/api/workshops');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.workshops)) {
-            if (isMounted) {
-              setWorkshops(data.workshops);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('technosavvys_workshops', JSON.stringify(data.workshops));
-              }
-              return;
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[AppContext] Failed to fetch workshops from server:', err);
-      }
-
-      // Fallback to local storage or empty
-      try {
-        if (typeof window !== 'undefined') {
-          const saved = localStorage.getItem('technosavvys_workshops');
-          if (saved !== null) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-              if (isMounted) setWorkshops(parsed);
-              return;
-            }
-          }
-        }
+        localStorage.setItem('technosavvys_workshops', JSON.stringify(items));
       } catch {}
-
-      if (isMounted) {
-        setWorkshops([]);
-      }
     }
+  };
 
-    loadWorkshops();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [darkMode, setDarkMode] = useState<boolean>(false);
+  // Helper to persist students
+  const persistStudents = (items: Student[]) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('technosavvys_students', JSON.stringify(items));
+      } catch {}
+    }
+  };
 
   // Helper to persist attendance into local browser storage
   const persistAttendance = (records: AttendanceRecord[]) => {
@@ -126,13 +91,122 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Helper to persist certificates
+  const persistCertificates = (items: Certificate[]) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('technosavvys_certificates', JSON.stringify(items));
+      } catch {}
+    }
+  };
+
+  // 1. Initial State loaded directly from localStorage to prevent flash of empty data
+  const [workshops, setWorkshops] = useState<Workshop[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('technosavvys_workshops');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [students, setStudents] = useState<Student[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('technosavvys_students');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('technosavvys_attendance');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [certificates, setCertificates] = useState<Certificate[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('technosavvys_certificates');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [darkMode, setDarkMode] = useState<boolean>(false);
+
+  // Sync workshops from server on mount without overwriting local data with empty array
+  useEffect(() => {
+    let isMounted = true;
+    async function loadWorkshops() {
+      // 1. Re-check local cache
+      if (typeof window !== 'undefined') {
+        try {
+          const saved = localStorage.getItem('technosavvys_workshops');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
+              setWorkshops(parsed);
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Fetch from server and merge (NEVER overwrite with empty array)
+      try {
+        const res = await fetch('/api/workshops');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.workshops) && data.workshops.length > 0 && isMounted) {
+            setWorkshops((prev) => {
+              const map = new Map<string, Workshop>();
+              for (const w of prev) { if (w?.id) map.set(w.id, w); }
+              for (const w of data.workshops) { if (w?.id) map.set(w.id, w); }
+              const merged = Array.from(map.values());
+              persistWorkshops(merged);
+              return merged;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[AppContext] Failed to fetch workshops from server:', err);
+      }
+    }
+
+    loadWorkshops();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Sync initial attendance from localStorage and server on mount
   useEffect(() => {
     let isMounted = true;
 
     // 1. Immediate local cache retrieval
-    try {
-      if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
+      try {
         const saved = localStorage.getItem('technosavvys_attendance');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -140,8 +214,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setAttendance(parsed);
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     // 2. Merge server-side attendance records without overwriting local state
     async function loadInitialAttendance() {
@@ -166,6 +240,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  // Load students & certificates from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stuSaved = localStorage.getItem('technosavvys_students');
+        if (stuSaved) {
+          const parsed = JSON.parse(stuSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) setStudents(parsed);
+        }
+        const certSaved = localStorage.getItem('technosavvys_certificates');
+        if (certSaved) {
+          const parsed = JSON.parse(certSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) setCertificates(parsed);
+        }
+      } catch {}
+    }
   }, []);
 
   // Sync dark class on html
@@ -276,14 +368,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteWorkshop = (id: string) => {
     setWorkshops((prev) => {
       const next = prev.filter((ws) => ws.id !== id);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('technosavvys_workshops', JSON.stringify(next));
-      }
+      persistWorkshops(next);
       return next;
     });
 
-    setAttendance((prev) => prev.filter((a) => a.workshopId !== id && (!a.sessionId || !a.sessionId.includes(id))));
-    setCertificates((prev) => prev.filter((c) => c.workshopId !== id && (!c.workshopId || !c.workshopId.includes(id))));
+    setAttendance((prev) => {
+      const next = prev.filter((a) => a.workshopId !== id && (!a.sessionId || !a.sessionId.includes(id)));
+      persistAttendance(next);
+      return next;
+    });
+
+    setCertificates((prev) => {
+      const next = prev.filter((c) => c.workshopId !== id && (!c.workshopId || !c.workshopId.includes(id)));
+      persistCertificates(next);
+      return next;
+    });
 
     fetch(`/api/workshops?id=${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -299,9 +398,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearAllWorkshops = () => {
     setWorkshops([]);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('technosavvys_workshops', JSON.stringify([]));
-    }
+    persistWorkshops([]);
 
     fetch('/api/workshops?id=all', {
       method: 'DELETE',
@@ -326,13 +423,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workshopId,
     };
 
-    setWorkshops((prev) =>
-      prev.map((w) =>
+    setWorkshops((prev) => {
+      const next = prev.map((w) =>
         w.id === workshopId
           ? { ...w, sessions: [...w.sessions, newSession] }
           : w
-      )
-    );
+      );
+      persistWorkshops(next);
+      return next;
+    });
 
     addToast(`Session "${newSession.sessionTitle}" added to ${workshop?.title}!`, 'success');
     logAuditEvent({
@@ -392,7 +491,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: newId,
       totalAttended: 0,
     };
-    setStudents((prev) => [newStudent, ...prev]);
+    setStudents((prev) => {
+      const next = [newStudent, ...prev];
+      persistStudents(next);
+      return next;
+    });
     addToast(`Student ${newStudent.name} registered successfully!`, 'success');
   };
 
@@ -406,19 +509,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setStudents((prev) =>
-      prev.map((s) =>
+    setStudents((prev) => {
+      const next = prev.map((s) =>
         s.id === studentId
           ? { ...s, enrolledWorkshopIds: [...s.enrolledWorkshopIds, workshopId] }
           : s
-      )
-    );
+      );
+      persistStudents(next);
+      return next;
+    });
 
-    setWorkshops((prev) =>
-      prev.map((w) =>
+    setWorkshops((prev) => {
+      const next = prev.map((w) =>
         w.id === workshopId ? { ...w, enrolledCount: w.enrolledCount + 1 } : w
-      )
-    );
+      );
+      persistWorkshops(next);
+      return next;
+    });
 
     addToast(`${student.name} enrolled into ${workshop.title}`, 'success');
     logAuditEvent({
@@ -454,6 +561,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           serverTimestamp: currentServerTimestamp,
           notes: record.notes,
         };
+        persistAttendance(copy);
         return copy;
       });
       addToast(`Updated attendance for ${record.studentName}: ${record.status}`, 'info');
@@ -464,15 +572,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         time: currentTime,
         serverTimestamp: currentServerTimestamp,
       };
-      setAttendance((prev) => [newRecord, ...prev]);
+      setAttendance((prev) => {
+        const next = [newRecord, ...prev];
+        persistAttendance(next);
+        return next;
+      });
 
       if (record.status === 'Present' || record.status === 'Late') {
         if (record.studentId) {
-          setStudents((prev) =>
-            prev.map((s) =>
+          setStudents((prev) => {
+            const next = prev.map((s) =>
               s.id === record.studentId ? { ...s, totalAttended: s.totalAttended + 1 } : s
-            )
-          );
+            );
+            persistStudents(next);
+            return next;
+          });
         }
       }
       addToast(`Attendance marked: ${record.studentName} (${record.status})`, 'success');
@@ -713,7 +827,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status,
         checkInMethod: 'Manual',
       }));
-      return [...newRecords, ...otherRecords];
+      const next = [...newRecords, ...otherRecords];
+      persistAttendance(next);
+      return next;
     });
 
     addToast(`Bulk marked ${enrolledStudents.length} students as ${status}`, 'success');
@@ -746,7 +862,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       score,
     };
 
-    setCertificates((prev) => [newCert, ...prev]);
+    setCertificates((prev) => {
+      const next = [newCert, ...prev];
+      persistCertificates(next);
+      return next;
+    });
     addToast(`Certificate ${certNo} issued to ${newCert.studentName}!`, 'success');
     logAuditEvent({
       action: 'ISSUE_CERTIFICATE',
