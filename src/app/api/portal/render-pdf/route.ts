@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyStudentSessionToken } from '@/lib/studentAuth';
+import { verifyStudentSessionToken, normalizeStudentName } from '@/lib/studentAuth';
 import { INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAllCertificates } from '@/lib/certificateStore';
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,6 +45,14 @@ export async function GET(request: NextRequest) {
     } catch {}
 
     if (!cert) {
+      try {
+        const stored = await getAllCertificates();
+        const found = stored.find((c) => c.id === certId);
+        if (found) cert = found;
+      } catch {}
+    }
+
+    if (!cert) {
       cert = INITIAL_CERTIFICATES.find((c) => c.id === certId);
     }
 
@@ -52,7 +61,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Strict Authorization Check
-    if (cert.studentId !== payload.studentId) {
+    const isAuthorized =
+      cert.studentId === payload.studentId ||
+      (cert.studentName && payload.name && normalizeStudentName(cert.studentName) === normalizeStudentName(payload.name));
+
+    if (!isAuthorized) {
       return new NextResponse('Forbidden: Access Denied to unauthorized certificate.', { status: 403 });
     }
 

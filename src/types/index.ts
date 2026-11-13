@@ -84,6 +84,7 @@ export interface Certificate {
   studentId: string;
   studentName: string;
   studentEmail: string;
+  studentPhone?: string;
   workshopId: string;
   workshopTitle: string;
   trainer: string;

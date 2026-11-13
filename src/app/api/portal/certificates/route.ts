@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyStudentSessionToken } from '@/lib/studentAuth';
+import { verifyStudentSessionToken, normalizeStudentName } from '@/lib/studentAuth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAllCertificates } from '@/lib/certificateStore';
 import { INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
@@ -98,9 +98,19 @@ export async function GET(request: NextRequest) {
 
     if (certsList.length === 0) {
       try {
-        const stored = await getAllCertificates({ studentId });
-        if (stored && stored.length > 0) {
-          certsList = stored.map((c) => ({
+        const allStored = await getAllCertificates();
+        const matchedStored = allStored.filter((c) => {
+          if (c.studentId === studentId) return true;
+          if (sessionPayload.name && c.studentName) {
+            const cNorm = normalizeStudentName(c.studentName);
+            const pNorm = normalizeStudentName(sessionPayload.name);
+            if (cNorm === pNorm || cNorm.includes(pNorm) || pNorm.includes(cNorm)) return true;
+          }
+          return false;
+        });
+
+        if (matchedStored && matchedStored.length > 0) {
+          certsList = matchedStored.map((c) => ({
             id: c.id,
             certificateNo: c.certificateNo || c.id,
             studentId: c.studentId,
@@ -120,10 +130,16 @@ export async function GET(request: NextRequest) {
     }
 
     if (certsList.length === 0) {
-      // Fallback to mock certificates matching studentId
-      const matched = INITIAL_CERTIFICATES.filter(
-        (c) => c.studentId === studentId && c.status === 'Issued'
-      );
+      // Fallback to mock certificates matching studentId or studentName
+      const matched = INITIAL_CERTIFICATES.filter((c) => {
+        if (c.studentId === studentId && c.status === 'Issued') return true;
+        if (sessionPayload.name && c.studentName) {
+          const cNorm = normalizeStudentName(c.studentName);
+          const pNorm = normalizeStudentName(sessionPayload.name);
+          if (cNorm === pNorm || cNorm.includes(pNorm) || pNorm.includes(cNorm)) return true;
+        }
+        return false;
+      });
 
       certsList = matched.map((c) => {
         const workshop = INITIAL_WORKSHOPS.find((w) => w.id === c.workshopId);

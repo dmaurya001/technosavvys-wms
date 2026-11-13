@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter } from '@/lib/rateLimiter';
-import { verifyStudentSessionToken } from '@/lib/studentAuth';
+import { verifyStudentSessionToken, normalizeStudentName } from '@/lib/studentAuth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { INITIAL_CERTIFICATES } from '@/data/mockData';
+import { getAllCertificates } from '@/lib/certificateStore';
 import { logAuditEvent } from '@/lib/audit';
 import {
   STUDENT_COOKIE_NAME,
@@ -80,6 +81,8 @@ export async function POST(request: NextRequest) {
     let certRecord: {
       id: string;
       studentId: string;
+      studentName?: string;
+      studentEmail?: string;
       certificateNo: string;
       storagePath?: string | null;
       fileName?: string | null;
@@ -107,11 +110,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (!certRecord) {
+      try {
+        const stored = await getAllCertificates();
+        const found = stored.find((c) => c.id === certificateId);
+        if (found) {
+          certRecord = {
+            id: found.id,
+            studentId: found.studentId,
+            studentName: found.studentName,
+            studentEmail: found.studentEmail,
+            certificateNo: found.certificateNo,
+            storagePath: found.storagePath || `certificates/${found.id}.pdf`,
+            fileName: found.fileName || `${(found.studentName || 'Student').replace(/\s+/g, '_')}_Certificate.pdf`,
+          };
+        }
+      } catch {}
+    }
+
+    if (!certRecord) {
       const mock = INITIAL_CERTIFICATES.find((c) => c.id === certificateId);
       if (mock) {
         certRecord = {
           id: mock.id,
           studentId: mock.studentId,
+          studentName: mock.studentName,
+          studentEmail: mock.studentEmail,
           certificateNo: mock.certificateNo,
           storagePath: mock.storagePath || `certificates/${mock.id}.pdf`,
           fileName: mock.fileName || `${mock.certificateNo}.pdf`,
@@ -127,7 +150,11 @@ export async function POST(request: NextRequest) {
     }
 
     // STRICT AUTHORIZATION CHECK (Prevent Unauthorized Access / IDOR)
-    if (certRecord.studentId !== studentId) {
+    const isAuthorized =
+      certRecord.studentId === studentId ||
+      ((certRecord as any).studentName && sessionPayload.name && normalizeStudentName((certRecord as any).studentName) === normalizeStudentName(sessionPayload.name));
+
+    if (!isAuthorized) {
       await logAuditEvent({
         action: 'SECURITY_UNAUTHORIZED_ACCESS_BLOCKED',
         entityType: 'Security',

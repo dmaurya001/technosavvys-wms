@@ -179,13 +179,24 @@ export async function POST(request: NextRequest) {
 
     // Check stored certificates
     try {
-      const stored = await getAllCertificates({ studentId: matchedStudent.id });
-      if (stored && stored.length > 0) {
-        certsList = stored.map((c) => ({
+      const allStored = await getAllCertificates();
+      const matchedStored = allStored.filter((c) => {
+        if (c.studentId === matchedStudent.id) return true;
+        if (targetEmail && c.studentEmail && c.studentEmail.toLowerCase() === targetEmail) return true;
+        if (cleanName && c.studentName) {
+          const cNorm = normalizeStudentName(c.studentName);
+          if (cNorm === cleanName || cNorm.includes(cleanName) || cleanName.includes(cNorm)) return true;
+        }
+        return false;
+      });
+
+      if (matchedStored && matchedStored.length > 0) {
+        certsList = matchedStored.map((c) => ({
           id: c.id,
           certificateNo: c.certificateNo || c.id,
           studentId: c.studentId,
           studentName: c.studentName,
+          studentEmail: c.studentEmail,
           workshopId: c.workshopId,
           workshopTitle: c.workshopTitle || 'Workshop Credential',
           trainer: c.trainer || 'Lead Instructor',
@@ -197,7 +208,9 @@ export async function POST(request: NextRequest) {
           fileName: c.fileName || `${c.studentName.replace(/\s+/g, '_')}_Certificate.pdf`,
         }));
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Error querying stored certificates in direct-login:', err);
+    }
 
     // Check Supabase certificates if configured
     if (certsList.length === 0 && isSupabaseConfigured()) {
@@ -247,9 +260,15 @@ export async function POST(request: NextRequest) {
 
     // Fallback to mock certificates
     if (certsList.length === 0) {
-      const matched = INITIAL_CERTIFICATES.filter(
-        (c) => c.studentId === matchedStudent!.id
-      );
+      const matched = INITIAL_CERTIFICATES.filter((c) => {
+        if (c.studentId === matchedStudent!.id) return true;
+        if (targetEmail && c.studentEmail && c.studentEmail.toLowerCase() === targetEmail) return true;
+        if (cleanName && c.studentName) {
+          const cNorm = normalizeStudentName(c.studentName);
+          if (cNorm === cleanName || cNorm.includes(cleanName) || cleanName.includes(cNorm)) return true;
+        }
+        return false;
+      });
 
       certsList = matched.map((c) => {
         const workshop = INITIAL_WORKSHOPS.find((w) => w.id === c.workshopId);
@@ -307,3 +326,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

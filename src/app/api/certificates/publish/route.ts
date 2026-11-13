@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { saveCertificate } from '@/lib/certificateStore';
+import { normalizeStudentName } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
 import { Certificate } from '@/types';
 
@@ -28,29 +29,25 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Fetch live attendance records to enforce attendance approval constraint
-    const allAttendance = await getAllAttendanceRecords({ workshopId });
-    const approvedAttendeeIds = new Set(
-      allAttendance
-        .filter(
-          (a) =>
-            a.status === 'APPROVED' ||
-            a.status === 'Present' ||
-            a.status === 'CERTIFICATE_ELIGIBLE'
-        )
-        .map((a) => a.studentId)
-        .filter(Boolean) as string[]
+    const allAttendance = await getAllAttendanceRecords();
+    const approvedAttendees = allAttendance.filter(
+      (a) =>
+        a.status === 'APPROVED' ||
+        a.status === 'Present' ||
+        a.status === 'CERTIFICATE_ELIGIBLE'
     );
 
-    // Also collect student emails/phones for flexible cross-referencing
+    const approvedAttendeeIds = new Set(
+      approvedAttendees.flatMap((a) => [a.studentId, a.id].filter(Boolean) as string[])
+    );
+
+    // Also collect student emails/phones/names for flexible cross-referencing
     const approvedAttendeeEmails = new Set(
-      allAttendance
-        .filter(
-          (a) =>
-            a.status === 'APPROVED' ||
-            a.status === 'Present' ||
-            a.status === 'CERTIFICATE_ELIGIBLE'
-        )
-        .map((a) => a.studentEmail.toLowerCase())
+      approvedAttendees.map((a) => (a.studentEmail || '').toLowerCase()).filter(Boolean)
+    );
+
+    const approvedAttendeeNames = new Set(
+      approvedAttendees.map((a) => normalizeStudentName(a.studentName || '')).filter(Boolean)
     );
 
     const publishedRecords: Certificate[] = [];
@@ -67,9 +64,10 @@ export async function POST(request: NextRequest) {
 
       // Enforce: ONLY attendance-approved students can receive certificates
       const isApproved =
+        item.attendanceApproved === true ||
         approvedAttendeeIds.has(studentId) ||
         (item.studentEmail && approvedAttendeeEmails.has(item.studentEmail.toLowerCase())) ||
-        item.attendanceApproved === true;
+        (item.studentName && approvedAttendeeNames.has(normalizeStudentName(item.studentName)));
 
       if (!isApproved) {
         skippedRecords.push({
@@ -159,8 +157,9 @@ export async function POST(request: NextRequest) {
         studentId,
         studentName: item.studentName || 'Participant',
         studentEmail: item.studentEmail || '',
-        workshopId,
-        workshopTitle: workshopTitle || 'Technical Workshop',
+        studentPhone: item.studentPhone || '',
+        workshopId: item.workshopId || workshopId,
+        workshopTitle: item.workshopTitle || workshopTitle || 'Technical Workshop',
         trainer: item.trainer || 'Lead Instructor',
         issueDate,
         grade: (item.grade as any) || 'Distinction',

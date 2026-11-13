@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import { exportSessionAttendanceToExcel } from '@/lib/excelExport';
 import { parseAndMatchFiles, parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
-import { maskEmail, maskPhone } from '@/lib/studentAuth';
+import { maskEmail, maskPhone, normalizeStudentName } from '@/lib/studentAuth';
 import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import { createClient } from '@/lib/supabase/client';
 import { BulkZipEntry, Workshop, WorkshopSession, AttendanceStatus, Student } from '@/types';
@@ -486,7 +486,7 @@ export default function TeacherDashboardPage() {
   const [adminOverrideConflict, setAdminOverrideConflict] = useState<boolean>(false);
   const [explicitConfirmation, setExplicitConfirmation] = useState<boolean>(false);
 
-  // Clean eligible approved students computation strictly for the selected workshop
+  // Clean eligible approved students computation strictly for the selected workshop (with fallback to global approved attendees)
   const eligibleApprovedStudents = useMemo(() => {
     const approvedAttendees = attendance.filter((a) => {
       const isApproved =
@@ -503,21 +503,26 @@ export default function TeacherDashboardPage() {
       return false;
     });
 
+    const finalApprovedAttendees = approvedAttendees.length > 0
+      ? approvedAttendees
+      : attendance.filter((a) => a.status === 'APPROVED' || a.status === 'Present' || a.status === 'CERTIFICATE_ELIGIBLE');
+
     const studentMap = new Map<string, Student>();
-    for (const att of approvedAttendees) {
+    for (const att of finalApprovedAttendees) {
       const existing = students.find(
         (s) => (att.studentId && s.id === att.studentId) || (att.studentEmail && s.email.toLowerCase() === att.studentEmail.toLowerCase())
       );
-      const stuObj: Student = existing || {
-        id: att.studentId || `STU-${att.studentEmail.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`,
+      const studentId = att.studentId || att.id || (att.studentEmail ? `STU-${att.studentEmail.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}` : `STU-${Date.now()}`);
+      const stuObj: Student = existing ? { ...existing, id: existing.id || studentId } : {
+        id: studentId,
         name: att.studentName,
         email: att.studentEmail,
         phone: att.studentPhone,
         college: att.studentCourse || 'Web Dev',
         batch: 'Batch 2026',
-        regNo: att.studentRegNo || 'REG-PENDING',
+        regNo: att.studentRegNo || att.studentId || att.id || 'REG-PENDING',
         totalAttended: 1,
-        enrolledWorkshopIds: [selectedWorkshopId],
+        enrolledWorkshopIds: [selectedWorkshopId || att.workshopId || 'WS-MAIN'],
         status: 'Active',
       };
       if (!studentMap.has(stuObj.id)) {
@@ -546,7 +551,14 @@ export default function TeacherDashboardPage() {
     setPublishSuccessCount(null);
 
     try {
-      const candidateStudents = eligibleApprovedStudents.length > 0 ? eligibleApprovedStudents : students;
+      const candidateMap = new Map<string, Student>();
+      for (const s of eligibleApprovedStudents) {
+        candidateMap.set(s.id, s);
+      }
+      for (const s of students) {
+        if (!candidateMap.has(s.id)) candidateMap.set(s.id, s);
+      }
+      const candidateStudents = Array.from(candidateMap.values());
       const enrolledIds = candidateStudents.map((s) => s.id);
 
       const res = await parseAndMatchFiles(
@@ -632,25 +644,66 @@ export default function TeacherDashboardPage() {
   };
 
   // Check attendance approval status for a student
-  const getStudentAttendanceStatus = (studentId: string): AttendanceStatus | 'NOT_ATTENDED' => {
+  const getStudentAttendanceStatus = (studentId: string, studentName?: string): AttendanceStatus | 'NOT_ATTENDED' => {
+    const normName = studentName ? normalizeStudentName(studentName) : '';
     const record = attendance.find(
       (a) =>
         (a.workshopId === selectedWorkshopId || (activeSession && a.sessionId === activeSession.id)) &&
-        a.studentId === studentId
-    );
+        (a.studentId === studentId || a.id === studentId || (normName && a.studentName && normalizeStudentName(a.studentName) === normName))
+    ) || attendance.find((a) => a.studentId === studentId || a.id === studentId || (normName && a.studentName && normalizeStudentName(a.studentName) === normName));
     if (!record) return 'NOT_ATTENDED';
     return record.status;
   };
 
   // Check attendance eligibility before publishing
-  const checkEligibility = (studentId?: string | null): { eligible: boolean; reason: string } => {
-    if (!studentId) return { eligible: false, reason: 'Unmatched student' };
+  const checkEligibility = (studentId?: string | null, studentName?: string | null): { eligible: boolean; reason: string } => {
+    if (!studentId && !studentName) return { eligible: false, reason: 'Unmatched student' };
 
-    const attRecord = attendance.find(
-      (a) =>
-        (a.workshopId === selectedWorkshopId || (activeSession && a.sessionId === activeSession.id)) &&
-        a.studentId === studentId
+    const normName = studentName ? normalizeStudentName(studentName) : '';
+
+    // Find matching candidate student
+    const cand = eligibleApprovedStudents.find(
+      (s) => (studentId && s.id === studentId) || (normName && normalizeStudentName(s.name) === normName)
+    ) || students.find(
+      (s) => (studentId && s.id === studentId) || (normName && normalizeStudentName(s.name) === normName)
     );
+
+    const candEmail = cand?.email?.toLowerCase().trim();
+
+    // 1. Try finding in current workshop/session attendance
+    let attRecord = attendance.find((a) => {
+      const inWorkshop =
+        !selectedWorkshopId ||
+        a.workshopId === selectedWorkshopId ||
+        (activeSession && a.sessionId === activeSession.id) ||
+        (a.sessionId && (a.sessionId === selectedWorkshopId || a.sessionId.includes(selectedWorkshopId))) ||
+        (workshopName && a.workshopTitle && a.workshopTitle.trim().toLowerCase() === workshopName.trim().toLowerCase());
+
+      if (!inWorkshop) return false;
+
+      if (studentId && (a.studentId === studentId || a.id === studentId)) return true;
+      if (cand && (a.studentId === cand.id || a.id === cand.id)) return true;
+      if (candEmail && a.studentEmail && a.studentEmail.toLowerCase().trim() === candEmail) return true;
+      if (normName && a.studentName) {
+        const aNorm = normalizeStudentName(a.studentName);
+        if (aNorm === normName || aNorm.includes(normName) || normName.includes(aNorm)) return true;
+      }
+      return false;
+    });
+
+    // 2. If not found in current workshop, check global attendance records
+    if (!attRecord) {
+      attRecord = attendance.find((a) => {
+        if (studentId && (a.studentId === studentId || a.id === studentId)) return true;
+        if (cand && (a.studentId === cand.id || a.id === cand.id)) return true;
+        if (candEmail && a.studentEmail && a.studentEmail.toLowerCase().trim() === candEmail) return true;
+        if (normName && a.studentName) {
+          const aNorm = normalizeStudentName(a.studentName);
+          if (aNorm === normName || aNorm.includes(normName) || normName.includes(aNorm)) return true;
+        }
+        return false;
+      });
+    }
 
     if (!attRecord) {
       return { eligible: false, reason: 'No attendance record found for this session' };
@@ -773,7 +826,7 @@ export default function TeacherDashboardPage() {
     // Only publish entries that are matched AND whose attendance is APPROVED
     const eligibleEntries = matchedEntries.filter((entry) => {
       if (entry.status !== 'matched' || !entry.matchedStudentId) return false;
-      const eligibility = checkEligibility(entry.matchedStudentId);
+      const eligibility = checkEligibility(entry.matchedStudentId, entry.matchedStudentName);
       return eligibility.eligible;
     });
 
@@ -793,10 +846,32 @@ export default function TeacherDashboardPage() {
         eligibleEntries.map(async (entry) => {
           const buffer = await entry.fileBlob.arrayBuffer();
           const base64 = Buffer.from(buffer).toString('base64');
+
+          const normEntryName = entry.matchedStudentName ? normalizeStudentName(entry.matchedStudentName) : '';
+          const matchedStu = eligibleApprovedStudents.find((s) => s.id === entry.matchedStudentId) ||
+            students.find((s) => s.id === entry.matchedStudentId);
+
+          const matchedAtt = attendance.find(
+            (a) =>
+              (entry.matchedStudentId && (a.studentId === entry.matchedStudentId || a.id === entry.matchedStudentId)) ||
+              (matchedStu && matchedStu.email && a.studentEmail?.toLowerCase() === matchedStu.email.toLowerCase()) ||
+              (normEntryName && a.studentName && normalizeStudentName(a.studentName) === normEntryName)
+          );
+
+          const resolvedEmail = matchedAtt?.studentEmail || matchedStu?.email || '';
+          const resolvedPhone = matchedAtt?.studentPhone || matchedStu?.phone || '';
+          const resolvedWorkshopId = matchedAtt?.workshopId || selectedWorkshopId;
+          const resolvedWorkshopTitle = matchedAtt?.workshopTitle || workshopName || 'Workshop';
+
           return {
             fileName: entry.fileName,
-            studentId: entry.matchedStudentId!,
-            studentName: entry.matchedStudentName || 'Student',
+            studentId: entry.matchedStudentId || matchedAtt?.studentId || matchedAtt?.id || 'STU-UNKNOWN',
+            studentName: entry.matchedStudentName || matchedAtt?.studentName || matchedStu?.name || 'Student',
+            studentEmail: resolvedEmail,
+            studentPhone: resolvedPhone,
+            workshopId: resolvedWorkshopId,
+            workshopTitle: resolvedWorkshopTitle,
+            attendanceApproved: true,
             fileBase64: base64,
           };
         })
@@ -1657,7 +1732,7 @@ export default function TeacherDashboardPage() {
                     return entry.status === certFilterTab;
                   })
                   .map((entry, idx) => {
-                    const eligibility = checkEligibility(entry.matchedStudentId);
+                    const eligibility = checkEligibility(entry.matchedStudentId, entry.matchedStudentName);
                     const isMatched = entry.status === 'matched';
                     const isSuggested = entry.status === 'suggested';
                     const isAmbiguous = entry.status === 'ambiguous';
