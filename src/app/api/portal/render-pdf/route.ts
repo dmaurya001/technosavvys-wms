@@ -6,6 +6,7 @@ import { verifyStudentSessionToken, normalizeStudentName } from '@/lib/studentAu
 import { INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAllCertificates } from '@/lib/certificateStore';
+import { generateCertificatePdf } from '@/lib/pdfGenerator';
 
 const PDF_DIR = path.join(process.cwd(), 'data', 'pdf-certificates');
 const TMP_PDF_DIR = path.join(os.tmpdir(), 'technosavvys-pdf-certificates');
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     const downloadFileName = cert.fileName || `${cert.certificateNo || 'Certificate'}.pdf`;
+    const cleanFilename = downloadFileName.replace(/["\r\n]/g, '');
 
     // 1. Deliver actual binary PDF file if available on disk
     const localPdfPath = path.join(PDF_DIR, `${certId}.pdf`);
@@ -89,7 +91,7 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${downloadFileName.replace(/["\r\n]/g, '')}"`,
+          'Content-Disposition': `attachment; filename="${cleanFilename}"`,
           'Content-Length': fileBytes.length.toString(),
           'Cache-Control': 'private, no-cache, no-store, must-revalidate',
         },
@@ -101,8 +103,10 @@ export async function GET(request: NextRequest) {
     const trainerName = cert.trainer || workshop?.trainer || 'Lead Instructor';
     const recipientName = cert.studentName || payload.name;
 
-    // Return a self-contained printable SVG/HTML certificate document
-    const html = `<!DOCTYPE html>
+    // Optional HTML format for preview if requested
+    const format = searchParams.get('format');
+    if (format === 'html') {
+      const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -110,151 +114,57 @@ export async function GET(request: NextRequest) {
   <style>
     @page { size: landscape; margin: 0; }
     body {
-      margin: 0;
-      padding: 40px;
-      background: #f8fafc;
-      font-family: 'Georgia', serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      box-sizing: border-box;
+      margin: 0; padding: 40px; background: #f8fafc; font-family: 'Georgia', serif;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh;
     }
     .cert-frame {
-      width: 1000px;
-      max-width: 95vw;
-      background: #ffffff;
-      border: 12px double #1e293b;
-      padding: 60px 50px;
-      text-align: center;
-      position: relative;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      width: 1000px; max-width: 95vw; background: #ffffff; border: 8px solid #065f46;
+      border-radius: 12px; padding: 50px 60px; text-align: center; outline: 2px solid #ca8a04; outline-offset: -12px;
     }
-    .badge {
-      display: inline-block;
-      padding: 6px 18px;
-      background: #eef2ff;
-      border: 1px solid #6366f1;
-      color: #4338ca;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      border-radius: 9999px;
-      margin-bottom: 20px;
-    }
-    h1 {
-      font-size: 38px;
-      text-transform: uppercase;
-      letter-spacing: 4px;
-      color: #0f172a;
-      margin: 0 0 10px 0;
-      font-weight: 900;
-    }
-    .subtitle {
-      font-size: 13px;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      color: #64748b;
-      margin-bottom: 25px;
-    }
-    .recipient {
-      font-size: 36px;
-      font-style: italic;
-      color: #312e81;
-      border-bottom: 2px solid #cbd5e1;
-      display: inline-block;
-      padding: 0 40px 10px 40px;
-      margin-bottom: 25px;
-      font-weight: bold;
-    }
-    .description {
-      font-size: 15px;
-      color: #475569;
-      line-height: 1.8;
-      max-width: 720px;
-      margin: 0 auto 40px auto;
-    }
-    .strong-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: #0f172a;
-    }
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-top: 50px;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 25px;
-    }
-    .sign-box {
-      text-align: center;
-      width: 220px;
-    }
-    .sign-line {
-      border-top: 1px solid #94a3b8;
-      margin-top: 10px;
-      padding-top: 5px;
-      font-size: 11px;
-      text-transform: uppercase;
-      color: #64748b;
-      font-weight: 600;
-    }
-    .serial-box {
-      font-family: monospace;
-      font-size: 12px;
-      color: #4338ca;
-      font-weight: bold;
-    }
+    h1 { font-size: 38px; color: #0f172a; margin: 0 0 10px 0; }
+    .recipient { font-size: 36px; color: #047857; font-weight: bold; margin-bottom: 25px; }
   </style>
 </head>
 <body>
   <div class="cert-frame">
-    <div class="badge">Official Verified Credential</div>
     <h1>Certificate of Completion</h1>
-    <div class="subtitle">This is proudly presented and certified to</div>
     <div class="recipient">${recipientName}</div>
-    <div class="description">
-      For exceptional dedication, attendance, and successful completion of the executive technical workshop on:<br>
-      <span class="strong-title">${workshopTitle}</span><br>
-      Awarded with <strong>${cert.grade}</strong> grade. Validated by Technosavvys Academic Council.
-    </div>
-    <div class="footer">
-      <div class="sign-box">
-        <div style="font-size: 16px; font-style: italic; color: #1e293b;">${trainerName}</div>
-        <div class="sign-line">Lead Instructor</div>
-      </div>
-      <div class="sign-box">
-        <div class="serial-box">${cert.certificateNo}</div>
-        <div class="sign-line">Security Serial Number</div>
-      </div>
-      <div class="sign-box">
-        <div style="font-size: 14px; color: #1e293b;">${cert.issueDate}</div>
-        <div class="sign-line">Date of Issuance</div>
-      </div>
-    </div>
+    <p>${workshopTitle}</p>
+    <p>Awarded to ${recipientName} with Distinction Honors.</p>
   </div>
-  <script>
-    window.onload = function() {
-      // Auto-trigger print dialog if intended for printing
-      if (window.location.search.includes('print=true')) {
-        window.print();
-      }
-    };
-  </script>
 </body>
 </html>`;
+      return new NextResponse(html, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+        },
+      });
+    }
 
-    return new NextResponse(html, {
+    // 2. Generate and deliver authentic 100% valid binary PDF document
+    const pdfBytes = await generateCertificatePdf({
+      certificateNo: cert.certificateNo,
+      recipientName,
+      workshopTitle,
+      trainerName,
+      issueDate: cert.issueDate || new Date().toISOString().split('T')[0],
+      grade: cert.grade || 'Distinction',
+      score: cert.score || 95,
+    });
+
+    return new NextResponse(Buffer.from(pdfBytes), {
       status: 200,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${cleanFilename}"`,
+        'Content-Length': pdfBytes.length.toString(),
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
       },
     });
   } catch (err: any) {
+    console.error('Error in render-pdf route:', err);
     return new NextResponse(err.message || 'Server error', { status: 500 });
   }
 }
-
