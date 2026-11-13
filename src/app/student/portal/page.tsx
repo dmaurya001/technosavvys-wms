@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import AppHeader from '@/components/layout/AppHeader';
+import AppHeader, { HomeNavLink } from '@/components/layout/AppHeader';
 import InactivityTracker from '@/components/InactivityTracker';
 import {
   Award,
@@ -183,16 +183,11 @@ export default function StudentPortalPage() {
 
       {/* Branded Official Header */}
       <AppHeader roleBadge="Student Portal" badgeColor="teal">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/#portals"
-            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
-          >
-            Home
-          </Link>
+        <div className="flex items-center gap-2.5">
+          <HomeNavLink />
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-xs font-semibold text-emerald-200 hover:text-rose-200 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-xs font-semibold text-emerald-200 hover:text-rose-200 transition-all cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>

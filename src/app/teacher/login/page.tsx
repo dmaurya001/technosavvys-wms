@@ -3,7 +3,7 @@
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import AppHeader from '@/components/layout/AppHeader';
+import AppHeader, { HomeNavLink } from '@/components/layout/AppHeader';
 import {
   ShieldCheck,
   Lock,
@@ -124,13 +124,8 @@ function TeacherLoginContent() {
 
       {/* Official Branded Header */}
       <AppHeader roleBadge="Admin Console" badgeColor="gold">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
-          >
-            Home
-          </Link>
+        <div className="flex items-center gap-2.5">
+          <HomeNavLink />
           <Link href="/student/login" className="pbtn text-xs">
             Student Login &rarr;
           </Link>

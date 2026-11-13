@@ -20,7 +20,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
-import AppHeader from '@/components/layout/AppHeader';
+import AppHeader, { HomeNavLink } from '@/components/layout/AppHeader';
 
 function CheckInForm({ sessionId }: { sessionId: string }) {
   const searchParams = useSearchParams();
@@ -195,13 +195,8 @@ function CheckInForm({ sessionId }: { sessionId: string }) {
 
       {/* Official Branded Header */}
       <AppHeader roleBadge="QR Check-In" badgeColor="emerald">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="text-xs text-white/80 hover:text-[#f5c542] transition-colors"
-          >
-            Home
-          </Link>
+        <div className="flex items-center gap-2.5">
+          <HomeNavLink />
           <Link href="/student/portal" className="pbtn text-xs">
             Student Portal &rarr;
           </Link>

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
-import AppHeader from '@/components/layout/AppHeader';
+import AppHeader, { HomeNavLink } from '@/components/layout/AppHeader';
 import { useApp } from '@/context/AppContext';
 import InactivityTracker from '@/components/InactivityTracker';
 import {
@@ -987,7 +987,8 @@ export default function TeacherDashboardPage() {
 
       {/* Official Branded Full-Width Header */}
       <AppHeader roleBadge="Teacher Console" badgeColor="gold">
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap">
+          <HomeNavLink />
           <button
             onClick={() => setIsNewWorkshopModalOpen(true)}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-[#f5c542] hover:bg-[#e5b532] text-[#04201c] text-xs font-bold transition-all text-center cursor-pointer shadow-sm"

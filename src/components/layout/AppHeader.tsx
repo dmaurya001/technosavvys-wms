@@ -2,16 +2,31 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { Home } from 'lucide-react';
 
 interface AppHeaderProps {
   roleBadge?: string;
   badgeColor?: 'gold' | 'emerald' | 'teal';
+  showHome?: boolean;
   children?: React.ReactNode;
+}
+
+export function HomeNavLink() {
+  return (
+    <Link
+      href="/"
+      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-[#f5c542]/15 border border-white/15 hover:border-[#f5c542]/40 text-xs font-semibold text-white hover:text-[#f5c542] transition-all cursor-pointer shadow-sm"
+    >
+      <Home className="w-3.5 h-3.5 text-[#f5c542]" />
+      <span>Home</span>
+    </Link>
+  );
 }
 
 export default function AppHeader({
   roleBadge,
   badgeColor = 'gold',
+  showHome = false,
   children,
 }: AppHeaderProps) {
   const badgeClasses =
@@ -35,7 +50,7 @@ export default function AppHeader({
           </div>
         </Link>
 
-        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
           {roleBadge && (
             <span
               className={`hidden md:inline-flex items-center px-3 py-1 rounded-full border text-xs font-bold uppercase tracking-wider ${badgeClasses}`}
@@ -44,13 +59,13 @@ export default function AppHeader({
             </span>
           )}
 
+          {showHome && <HomeNavLink />}
+
           {children ? (
             children
           ) : (
             <nav className="tech-nav">
-              <Link href="/" className="link">
-                Home
-              </Link>
+              <HomeNavLink />
               <Link href="/#portals" className="pbtn">
                 👤 Login Portal
               </Link>
@@ -61,3 +76,4 @@ export default function AppHeader({
     </header>
   );
 }
+
