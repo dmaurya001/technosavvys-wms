@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAllWorkshops, deleteWorkshop } from './workshopStore';
 import { getAllAttendanceRecords, deleteAttendanceByWorkshop } from './attendanceStore';
-import { getAllCertificates, deleteUnpublishedCertificatesByWorkshop } from './certificateStore';
+import { getAllCertificates, deleteAllCertificatesByWorkshop, deleteUnpublishedCertificatesByWorkshop } from './certificateStore';
 import { logAuditEvent } from './audit';
 import { Workshop } from '@/types';
 
@@ -12,6 +12,7 @@ export interface CascadeDeleteResult {
   backupPath: string;
   deletedWorkshop: Workshop | null;
   deletedAttendanceCount: number;
+  deletedCertificatesCount: number;
   deletedUnpublishedCertificatesCount: number;
   hasPublishedCertificates: boolean;
   publishedCertificatesCount: number;
@@ -29,10 +30,8 @@ export async function executeSafeCascadeDelete(
     throw new Error(`Workshop "${workshopId}" not found in registry.`);
   }
 
-  // 1. Check for certificates
+  // 1. Fetch all certificates linked to this workshop
   const allCerts = await getAllCertificates({ workshopId });
-  const publishedCerts = allCerts.filter((c) => c.status === 'Issued');
-  const unpublishedCerts = allCerts.filter((c) => c.status !== 'Issued');
 
   // 2. Fetch linked attendance records
   const linkedAttendance = await getAllAttendanceRecords({ workshopId });
@@ -53,18 +52,21 @@ export async function executeSafeCascadeDelete(
     workshopId,
     workshop: targetWs,
     linkedAttendance,
-    unpublishedCertificates: unpublishedCerts,
-    publishedCertificatesRetained: publishedCerts,
+    certificates: allCerts,
   };
 
-  fs.writeFileSync(backupPath, JSON.stringify(backupData, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(backupPath, JSON.stringify(backupData, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[cascadeDelete] Backup write error:', err);
+  }
 
-  // 4. Perform Cascade Delete
+  // 4. Perform Complete Cascade Delete
   // Delete linked attendance
   const deletedAttendance = await deleteAttendanceByWorkshop(workshopId);
 
-  // Delete unpublished certificates only
-  const deletedCerts = await deleteUnpublishedCertificatesByWorkshop(workshopId);
+  // Delete ALL certificates and their physical PDFs
+  const deletedCerts = await deleteAllCertificatesByWorkshop(workshopId);
 
   // Delete workshop itself
   await deleteWorkshop(workshopId);
@@ -78,8 +80,7 @@ export async function executeSafeCascadeDelete(
       deletedBy: userEmail,
       backupFile: backupFilename,
       attendanceDeleted: deletedAttendance.length,
-      unpublishedCertsDeleted: deletedCerts.length,
-      publishedCertsRetained: publishedCerts.length,
+      certificatesDeleted: deletedCerts.length,
     },
   });
 
@@ -89,10 +90,11 @@ export async function executeSafeCascadeDelete(
     backupPath,
     deletedWorkshop: targetWs,
     deletedAttendanceCount: deletedAttendance.length,
+    deletedCertificatesCount: deletedCerts.length,
     deletedUnpublishedCertificatesCount: deletedCerts.length,
-    hasPublishedCertificates: publishedCerts.length > 0,
-    publishedCertificatesCount: publishedCerts.length,
-    message: `Cascade delete completed for workshop ${workshopId}. Backup saved to ${backupFilename}.`,
+    hasPublishedCertificates: false,
+    publishedCertificatesCount: 0,
+    message: `Cascade delete completed for workshop ${workshopId}. All attendance, certificates, and files removed.`,
   };
 }
 

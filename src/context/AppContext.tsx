@@ -251,11 +251,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
 
+    setAttendance((prev) => prev.filter((a) => a.workshopId !== id && (!a.sessionId || !a.sessionId.includes(id))));
+    setCertificates((prev) => prev.filter((c) => c.workshopId !== id && (!c.workshopId || !c.workshopId.includes(id))));
+
     fetch(`/api/workshops?id=${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }).catch((err) => console.warn('[AppContext] Workshop delete warning:', err));
 
-    addToast('Workshop deleted.', 'info');
+    addToast('Workshop and all associated records deleted.', 'info');
     logAuditEvent({
       action: 'DELETE_WORKSHOP',
       entityType: 'Workshop',

@@ -1,1 +1,36 @@
-[]
+[
+  {
+    "id": "ATT-555822",
+    "workshopId": "WS-7745",
+    "workshopTitle": "xy",
+    "sessionId": "SESS-WS-7745-1",
+    "sessionTitle": "Session 1: Main Workshop",
+    "studentName": "deepak m",
+    "studentEmail": "dm123@gmail.com",
+    "studentPhone": "9898989890",
+    "studentCourse": "adca",
+    "date": "2026-11-13",
+    "time": "03:05 pm",
+    "serverTimestamp": "2026-11-13T09:35:55.822Z",
+    "status": "APPROVED",
+    "checkInMethod": "QR Scan",
+    "notes": "Verified Permanent Session QR. Awaiting Admin Approval."
+  },
+  {
+    "id": "ATT-682275",
+    "workshopId": "WS-7745",
+    "workshopTitle": "xy",
+    "sessionId": "SESS-WS-7745-1",
+    "sessionTitle": "Session 1: Main Workshop",
+    "studentName": "Deepak",
+    "studentEmail": "deepakmaurya.aict@gmail.com",
+    "studentPhone": "8960627330",
+    "studentCourse": "adca",
+    "date": "2026-11-13",
+    "time": "02:34 pm",
+    "serverTimestamp": "2026-11-13T09:04:42.275Z",
+    "status": "APPROVED",
+    "checkInMethod": "QR Scan",
+    "notes": "Verified Permanent Session QR. Awaiting Admin Approval."
+  }
+]

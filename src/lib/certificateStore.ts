@@ -180,9 +180,22 @@ export async function saveCertificate(certificate: Certificate): Promise<Certifi
   initCertificateStore();
 
   const idx = memoryCertificates.findIndex(
-    (c) => c.id === certificate.id || c.certificateNo === certificate.certificateNo
+    (c) =>
+      c.id === certificate.id ||
+      c.certificateNo === certificate.certificateNo ||
+      (Boolean(certificate.workshopId) &&
+        Boolean(certificate.studentEmail) &&
+        c.workshopId === certificate.workshopId &&
+        c.studentEmail?.toLowerCase() === certificate.studentEmail?.toLowerCase()) ||
+      (Boolean(certificate.workshopId) &&
+        Boolean(certificate.studentId) &&
+        c.workshopId === certificate.workshopId &&
+        c.studentId === certificate.studentId)
   );
   if (idx >= 0) {
+    // Preserve initial certificate number if already assigned
+    certificate.certificateNo = memoryCertificates[idx].certificateNo || certificate.certificateNo;
+    certificate.id = memoryCertificates[idx].id || certificate.id;
     memoryCertificates[idx] = certificate;
   } else {
     memoryCertificates.unshift(certificate);
@@ -249,6 +262,65 @@ export async function deleteUnpublishedCertificatesByWorkshop(workshopId: string
 
   global.__technosavvysCertificates = memoryCertificates;
   safeSaveToFile(memoryCertificates);
+
+  return toDelete;
+}
+
+/**
+ * Delete ALL certificates (both published & draft) and their physical PDF files
+ * when a workshop is explicitly deleted by the user.
+ */
+export async function deleteAllCertificatesByWorkshop(workshopId: string): Promise<Certificate[]> {
+  initCertificateStore();
+
+  const toDelete = memoryCertificates.filter(
+    (c) => c.workshopId === workshopId || c.workshopId?.includes(workshopId)
+  );
+
+  if (toDelete.length === 0) return [];
+
+  // Remove physical certificate PDF files
+  const PDF_DIR = path.join(process.cwd(), 'data', 'pdf-certificates');
+  const TMP_PDF_DIR = path.join(os.tmpdir(), 'technosavvys-pdf-certificates');
+
+  for (const cert of toDelete) {
+    const candidates = [
+      `${cert.id}.pdf`,
+      cert.fileName,
+      `${cert.certificateNo}.pdf`,
+    ].filter(Boolean) as string[];
+
+    for (const fn of candidates) {
+      try {
+        const localP = path.join(PDF_DIR, fn);
+        if (fs.existsSync(localP)) fs.unlinkSync(localP);
+      } catch {}
+
+      try {
+        const tmpP = path.join(TMP_PDF_DIR, fn);
+        if (fs.existsSync(tmpP)) fs.unlinkSync(tmpP);
+      } catch {}
+    }
+  }
+
+  // Remove from in-memory and local storage
+  memoryCertificates = memoryCertificates.filter(
+    (c) => !toDelete.some((d) => d.id === c.id)
+  );
+
+  global.__technosavvysCertificates = memoryCertificates;
+  safeSaveToFile(memoryCertificates);
+
+  // Remove from Supabase if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createAdminClient();
+      const ids = toDelete.map((c) => c.id);
+      await supabase.from('certificates').delete().in('id', ids);
+    } catch (err) {
+      console.warn('[certificateStore] Supabase delete warning:', err);
+    }
+  }
 
   return toDelete;
 }

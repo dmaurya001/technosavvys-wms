@@ -87,6 +87,14 @@ function initMemory() {
 export async function getAllWorkshops(): Promise<Workshop[]> {
   initMemory();
 
+  // Re-sync with file storage to capture cross-process / lambda persistence
+  const fileWorkshops = safeLoadFromFile();
+  for (const fw of fileWorkshops) {
+    if (!memoryWorkshops.some((w) => w.id === fw.id)) {
+      memoryWorkshops.push(fw);
+    }
+  }
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = createAdminClient();
@@ -116,13 +124,7 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
         `)
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data)) {
-        if (data.length === 0) {
-          memoryWorkshops.length = 0;
-          safeSaveToFile([]);
-          return [];
-        }
-
+      if (!error && Array.isArray(data) && data.length > 0) {
         const dbWorkshops: Workshop[] = data.map((row) => {
           const wsCode = row.code || row.id;
           const sessions: WorkshopSession[] = (row.workshop_sessions || []).map((s: any) => ({
@@ -171,10 +173,17 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
           };
         });
 
-        memoryWorkshops.length = 0;
-        memoryWorkshops.push(...dbWorkshops);
+        // Merge DB workshops into memory, never wiping locally saved workshops
+        for (const dbW of dbWorkshops) {
+          const idx = memoryWorkshops.findIndex((w) => w.id === dbW.id);
+          if (idx >= 0) {
+            memoryWorkshops[idx] = dbW;
+          } else {
+            memoryWorkshops.unshift(dbW);
+          }
+        }
+        global.__technosavvysWorkshops = memoryWorkshops;
         safeSaveToFile(memoryWorkshops);
-        return memoryWorkshops;
       }
     } catch (err) {
       console.warn('[workshopStore] Supabase query failed, falling back to persistent store:', err);
@@ -270,6 +279,7 @@ export async function deleteWorkshop(id: string): Promise<boolean> {
     try {
       const supabase = createAdminClient();
       await supabase.from('workshops').delete().eq('code', id);
+      await supabase.from('workshops').delete().eq('id', id);
     } catch {}
   }
 
