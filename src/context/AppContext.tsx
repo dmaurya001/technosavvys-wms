@@ -135,12 +135,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const data = await res.json();
           if (data.success && Array.isArray(data.attendees) && isMounted) {
-            setAttendance((prev) => {
-              const map = new Map<string, AttendanceRecord>();
-              for (const r of prev) map.set(r.id, r);
-              for (const r of data.attendees) map.set(r.id, r);
-              return Array.from(map.values());
-            });
+            setAttendance(data.attendees);
           }
         }
       } catch {}
@@ -602,16 +597,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const syncAttendanceWithServer = (serverRecords: AttendanceRecord[]) => {
-    setAttendance((prev) => {
-      const map = new Map<string, AttendanceRecord>();
-      for (const r of prev) {
-        map.set(r.id, r);
-      }
-      for (const r of serverRecords) {
-        map.set(r.id, r);
-      }
-      return Array.from(map.values());
-    });
+    if (!Array.isArray(serverRecords)) return;
+    setAttendance(() => serverRecords);
   };
 
   const bulkMarkAttendance = (workshopId: string, status: AttendanceStatus) => {

@@ -1,0 +1,74 @@
+{
+  "deletedAt": "2026-11-13T06:05:26.207Z",
+  "deletedBy": "techno3deepak@gmail.com",
+  "workshopId": "WS-TEST-SYS-5936",
+  "workshop": {
+    "id": "WS-TEST-SYS-5936",
+    "title": "Automated E2E Test Workshop",
+    "category": "Web Dev",
+    "trainer": "Test Lead",
+    "trainerRole": "Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab Test",
+    "capacity": 50,
+    "price": 0,
+    "status": "Ongoing",
+    "tags": [
+      "Test"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-TEST-SYS-5936-1",
+        "workshopId": "WS-TEST-SYS-5936",
+        "sessionTitle": "Session 1: Main Workshop",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab Test",
+        "status": "Scheduled",
+        "isActive": true,
+        "qrToken": "ts_qr_test_1794549925936"
+      }
+    ]
+  },
+  "linkedAttendance": [
+    {
+      "id": "ATT-926015",
+      "workshopId": "WS-TEST-SYS-5936",
+      "workshopTitle": "Automated E2E Test Workshop",
+      "sessionId": "SESS-WS-TEST-SYS-5936-1",
+      "sessionTitle": "Session 1: Main Workshop",
+      "studentName": "Aman Sharma",
+      "studentEmail": "student.1794549925982@technosavvys.edu",
+      "studentPhone": "9831562485",
+      "studentCourse": "B.Tech CSE",
+      "date": "2026-11-04",
+      "time": "11:35 am",
+      "serverTimestamp": "2026-11-13T06:05:26.014Z",
+      "status": "APPROVED",
+      "checkInMethod": "QR Scan",
+      "notes": "Verified Permanent Session QR. Awaiting Admin Approval."
+    }
+  ],
+  "unpublishedCertificates": [],
+  "publishedCertificatesRetained": [
+    {
+      "id": "CERT-6165-7492",
+      "certificateNo": "TECH-2026-7613",
+      "studentId": "ATT-926015",
+      "studentName": "Aman Sharma",
+      "studentEmail": "student.1794549925982@technosavvys.edu",
+      "workshopId": "WS-TEST-SYS-5936",
+      "workshopTitle": "Automated E2E Test Workshop",
+      "trainer": "Lead Instructor",
+      "issueDate": "2026-11-13",
+      "grade": "Distinction",
+      "status": "Issued",
+      "score": 95,
+      "storagePath": "certificates/WS-TEST-SYS-5936_ATT-926015_1794549926165.pdf",
+      "fileName": "Aman_Sharma.pdf"
+    }
+  ]
+}

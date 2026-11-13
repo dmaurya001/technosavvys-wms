@@ -1,4 +1,5 @@
-import { createClient } from './supabase/client';
+import { isSupabaseConfigured } from './supabase/config';
+import { createAdminClient } from './supabase/admin';
 
 export interface AuditLogPayload {
   action:
@@ -22,20 +23,17 @@ export interface AuditLogPayload {
 
 export async function logAuditEvent(payload: AuditLogPayload) {
   try {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    const auditEntry = {
-      user_id: user?.id || null,
-      action: payload.action,
-      entity_type: payload.entityType,
-      entity_id: payload.entityId || null,
-      details: payload.details || {},
-      created_at: new Date().toISOString(),
-    };
-
-    // Attempt writing to Supabase audit_logs table
-    await supabase.from('audit_logs').insert([auditEntry]);
+    if (isSupabaseConfigured()) {
+      const supabase = createAdminClient();
+      const auditEntry = {
+        action: payload.action,
+        entity_type: payload.entityType,
+        entity_id: payload.entityId || null,
+        details: payload.details || {},
+        created_at: new Date().toISOString(),
+      };
+      await supabase.from('audit_logs').insert([auditEntry]);
+    }
   } catch (err) {
     // Graceful fallback for offline / mock testing
     console.warn('[Audit Log Offline/Mock]:', payload);

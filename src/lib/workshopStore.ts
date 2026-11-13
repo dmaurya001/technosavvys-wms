@@ -31,7 +31,7 @@ function safeLoadFromFile(): Workshop[] {
   // 1. Try local data file
   try {
     if (fs.existsSync(LOCAL_STORAGE_FILE)) {
-      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8');
+      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const w of parsed) {
@@ -44,7 +44,7 @@ function safeLoadFromFile(): Workshop[] {
   // 2. Try /tmp file (Vercel Serverless environment)
   try {
     if (fs.existsSync(TMP_STORAGE_FILE)) {
-      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8');
+      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const w of parsed) {
@@ -259,22 +259,14 @@ export async function saveWorkshop(workshop: Workshop): Promise<Workshop> {
 
 /**
  * Delete a workshop by code or id
+ * Blanket 'all' deletion is strictly forbidden to prevent accidental catastrophic data loss.
  */
 export async function deleteWorkshop(id: string): Promise<boolean> {
-  initMemory();
-
-  if (id === 'all') {
-    memoryWorkshops.length = 0;
-    safeSaveToFile(memoryWorkshops);
-
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = createAdminClient();
-        await supabase.from('workshops').delete().neq('code', '__PRESERVE_NONE__');
-      } catch {}
-    }
-    return true;
+  if (!id || id === 'all') {
+    throw new Error('Mass deletion via id="all" is strictly prohibited.');
   }
+
+  initMemory();
 
   const initialCount = memoryWorkshops.length;
   memoryWorkshops = memoryWorkshops.filter((w) => w.id !== id);

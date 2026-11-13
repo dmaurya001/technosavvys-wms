@@ -30,7 +30,7 @@ function safeLoadFromFile(): AttendanceRecord[] {
   // 1. Try local data file
   try {
     if (fs.existsSync(LOCAL_STORAGE_FILE)) {
-      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8');
+      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const r of parsed) {
@@ -43,7 +43,7 @@ function safeLoadFromFile(): AttendanceRecord[] {
   // 2. Try /tmp file (Vercel Serverless environment)
   try {
     if (fs.existsSync(TMP_STORAGE_FILE)) {
-      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8');
+      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const r of parsed) {
@@ -361,3 +361,36 @@ export async function bulkUpdateAttendanceStatusInStore(
 
   return count;
 }
+
+/**
+ * Cascade delete attendance records by workshop ID
+ */
+export async function deleteAttendanceByWorkshop(workshopId: string): Promise<AttendanceRecord[]> {
+  initAttendanceStore();
+
+  const toDelete = memoryAttendance.filter(
+    (a) => a.workshopId === workshopId || (a.sessionId && a.sessionId.includes(workshopId))
+  );
+
+  if (toDelete.length === 0) return [];
+
+  memoryAttendance = memoryAttendance.filter(
+    (a) => a.workshopId !== workshopId && (!a.sessionId || !a.sessionId.includes(workshopId))
+  );
+
+  global.__technosavvysAttendance = memoryAttendance;
+  safeSaveToFile(memoryAttendance);
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createAdminClient();
+      const deleteIds = toDelete.map((a) => a.id);
+      await supabase.from('attendance').delete().in('id', deleteIds);
+    } catch (err) {
+      console.warn('[attendanceStore] Cascade Supabase delete error:', err);
+    }
+  }
+
+  return toDelete;
+}
+

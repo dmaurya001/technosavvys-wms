@@ -1,0 +1,34 @@
+[
+  {
+    "file": "data/attendance-records.json",
+    "backupFile": "backups\\2026-11-04T18-10-00\\attendance-records.json",
+    "size": 16682,
+    "recordCount": 26,
+    "sha256": "fd231b7caddf4123cf0af8997f09eac66d920eba462e43e64e90525dcb47f24f",
+    "verified": true
+  },
+  {
+    "file": "data/workshops.json",
+    "backupFile": "backups\\2026-11-04T18-10-00\\workshops.json",
+    "size": 8925,
+    "recordCount": 8,
+    "sha256": "48fbd0e2169e97fa881ecba423e8496292fb914e7b579b3dfbe1c25edd5fd8dd",
+    "verified": true
+  },
+  {
+    "file": "data/certificates.json",
+    "backupFile": "backups\\2026-11-04T18-10-00\\certificates.json",
+    "size": 4765,
+    "recordCount": 10,
+    "sha256": "cf6e2dab0bc349d35b12d38f73c542a0e5f2e6eaadbf3c602c881fe2d44691d9",
+    "verified": true
+  },
+  {
+    "file": "src/data/mockData.ts",
+    "backupFile": "backups\\2026-11-04T18-10-00\\mockData.ts",
+    "size": 17955,
+    "recordCount": "N/A",
+    "sha256": "62027021fb813272d054a632bd5c012c196a9e9bfd84d0222fed74427807a6cd",
+    "verified": true
+  }
+]

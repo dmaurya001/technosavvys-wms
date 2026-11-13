@@ -31,7 +31,7 @@ function safeLoadFromFile(): Certificate[] {
   // 2. Try local data file
   try {
     if (fs.existsSync(LOCAL_STORAGE_FILE)) {
-      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8');
+      const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const c of parsed) {
@@ -44,7 +44,7 @@ function safeLoadFromFile(): Certificate[] {
   // 3. Try /tmp file (Vercel Serverless environment)
   try {
     if (fs.existsSync(TMP_STORAGE_FILE)) {
-      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8');
+      const raw = fs.readFileSync(TMP_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const c of parsed) {
@@ -235,3 +235,27 @@ export async function deleteCertificate(
       : 'Certificate not found in registry.',
   };
 }
+
+/**
+ * Delete unpublished certificates for a workshop during cascade delete
+ * Never deletes published certificates
+ */
+export async function deleteUnpublishedCertificatesByWorkshop(workshopId: string): Promise<Certificate[]> {
+  initCertificateStore();
+
+  const toDelete = memoryCertificates.filter(
+    (c) => (c.workshopId === workshopId || c.workshopId?.includes(workshopId)) && c.status !== 'Issued'
+  );
+
+  if (toDelete.length === 0) return [];
+
+  memoryCertificates = memoryCertificates.filter(
+    (c) => !toDelete.some((d) => d.id === c.id)
+  );
+
+  global.__technosavvysCertificates = memoryCertificates;
+  safeSaveToFile(memoryCertificates);
+
+  return toDelete;
+}
+

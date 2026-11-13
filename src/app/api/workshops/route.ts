@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractAndValidateSession } from '@/lib/sessionManager';
-import { getAllWorkshops, saveWorkshop, deleteWorkshop } from '@/lib/workshopStore';
+import { getAllWorkshops, saveWorkshop } from '@/lib/workshopStore';
+import { executeSafeCascadeDelete } from '@/lib/cascadeDelete';
 import { logAuditEvent } from '@/lib/audit';
 
 export async function GET(request: NextRequest) {
@@ -84,18 +85,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = await deleteWorkshop(id);
+    if (id === 'all') {
+      return NextResponse.json(
+        { error: 'Mass deletion via id="all" is strictly prohibited.' },
+        { status: 400 }
+      );
+    }
 
-    await logAuditEvent({
-      action: 'DELETE_WORKSHOP',
-      entityType: 'Workshop',
-      entityId: id,
-      details: { deletedBy: auth.session.email },
-    });
+    const result = await executeSafeCascadeDelete(id, auth.session.email);
 
     return NextResponse.json({
       success: true,
-      deleted,
+      result,
     });
   } catch (err: any) {
     console.error('[API /api/workshops DELETE Error]:', err);

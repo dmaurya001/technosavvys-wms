@@ -58,8 +58,8 @@ export default function TeacherDashboardPage() {
     students,
     certificates,
     addWorkshop,
+    updateWorkshop,
     deleteWorkshop,
-    clearAllWorkshops,
     updateAttendanceStatus,
     syncAttendanceWithServer,
     toggleSessionActive,
@@ -148,29 +148,39 @@ export default function TeacherDashboardPage() {
     }
   }, [activeSession, selectedWorkshopId, origin, workshopName]);
 
-  const handleDeleteWorkshop = (id: string) => {
-    if (!id) return;
-    deleteWorkshop(id);
-    const remaining = workshops.filter((w) => w.id !== id);
-    if (remaining.length > 0) {
-      setSelectedWorkshopId(remaining[0].id);
-    } else {
-      setSelectedWorkshopId('');
-      setWorkshopName('');
-      setActiveSession(null);
-      setQrToken('');
-      setQrCodeDataUrl('');
-    }
-  };
+  const [workshopToDelete, setWorkshopToDelete] = useState<Workshop | null>(null);
+  const [isDeletingWorkshop, setIsDeletingWorkshop] = useState(false);
 
-  const handleDeleteAllWorkshops = () => {
-    if (workshops.length === 0) return;
-    clearAllWorkshops();
-    setSelectedWorkshopId('');
-    setWorkshopName('');
-    setActiveSession(null);
-    setQrToken('');
-    setQrCodeDataUrl('');
+  const handleConfirmDeleteWorkshop = async () => {
+    if (!workshopToDelete) return;
+    try {
+      setIsDeletingWorkshop(true);
+      const res = await fetch(`/api/workshops?id=${encodeURIComponent(workshopToDelete.id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete workshop');
+      }
+
+      deleteWorkshop(workshopToDelete.id);
+      const remaining = workshops.filter((w) => w.id !== workshopToDelete.id);
+      if (remaining.length > 0) {
+        setSelectedWorkshopId(remaining[0].id);
+      } else {
+        setSelectedWorkshopId('');
+        setWorkshopName('');
+        setActiveSession(null);
+        setQrToken('');
+        setQrCodeDataUrl('');
+      }
+      addToast(`Workshop "${workshopToDelete.title}" and linked records safely deleted with backup.`, 'info');
+      setWorkshopToDelete(null);
+    } catch (err: any) {
+      addToast(err.message || 'Error deleting workshop', 'error');
+    } finally {
+      setIsDeletingWorkshop(false);
+    }
   };
 
   const isSessionActive = activeSession
@@ -196,11 +206,17 @@ export default function TeacherDashboardPage() {
   const handleGenerateQr = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    let targetWorkshop = workshops.find((w) => w.id === selectedWorkshopId);
+    if (!workshopName.trim()) {
+      addToast('Please enter a workshop title.', 'error');
+      return;
+    }
 
-    if (isCreatingNew || !targetWorkshop) {
-      const newWsId = `WS-${100 + workshops.length + 1}`;
-      const newSessionId = `SESS-${100 + workshops.length + 1}-1`;
+    let targetWorkshop = workshops.find((w) => w.id === selectedWorkshopId);
+    const isDifferentTitle = targetWorkshop && targetWorkshop.title.trim().toLowerCase() !== workshopName.trim().toLowerCase();
+
+    if (isCreatingNew || !targetWorkshop || isDifferentTitle) {
+      const newWsId = `WS-${Date.now().toString().slice(-4)}`;
+      const newSessionId = `SESS-${newWsId}-1`;
       const permanentSessionQrToken = getSessionPermanentQrToken(newWsId, newSessionId);
 
       const newSession: WorkshopSession = {
@@ -228,7 +244,7 @@ export default function TeacherDashboardPage() {
         capacity: 100,
         status: 'Ongoing',
         price: 0,
-        description: 'Executive Hands-on Workshop',
+        description: 'Hands-on Workshop Session',
         tags: ['Workshop'],
         sessions: [newSession],
       });
@@ -237,14 +253,21 @@ export default function TeacherDashboardPage() {
       setActiveSession(newSession);
       setQrToken(permanentSessionQrToken);
       setIsCreatingNew(false);
-      addToast(`Workshop "${workshopName}" created with permanent session QR!`, 'success');
+      addToast(`Workshop "${workshopName.trim()}" created with permanent QR!`, 'success');
     } else {
+      updateWorkshop(targetWorkshop.id, {
+        title: workshopName.trim(),
+        date: workshopDate,
+        time: workshopTime,
+      });
+
       if (targetWorkshop.sessions && targetWorkshop.sessions.length > 0) {
         const sess = targetWorkshop.sessions[0];
         setActiveSession(sess);
         const permToken = sess.qrToken || getSessionPermanentQrToken(targetWorkshop.id, sess.id);
         setQrToken(permToken);
       }
+      addToast(`QR Code session refreshed for "${workshopName.trim()}".`, 'success');
     }
   };
 
@@ -350,31 +373,43 @@ export default function TeacherDashboardPage() {
 
   const handleApproveAttendance = async (id: string, name: string) => {
     updateAttendanceStatus(id, 'APPROVED');
-    addToast(`Approved attendance for ${name}. Student is now certificate-eligible!`, 'success');
     try {
-      await fetch('/api/attendance', {
+      const res = await fetch('/api/attendance', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: 'APPROVED' }),
       });
-      fetchLiveAttendance();
-    } catch (err) {
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server error (HTTP ${res.status})`);
+      }
+      addToast(`Approved attendance for ${name}. Student is now certificate-eligible!`, 'success');
+      await fetchLiveAttendance();
+    } catch (err: any) {
       console.error('Failed to sync approval with server:', err);
+      addToast(`Failed to approve ${name}: ${err.message || 'Server error'}`, 'error');
+      await fetchLiveAttendance();
     }
   };
 
   const handleRejectAttendance = async (id: string, name: string) => {
     updateAttendanceStatus(id, 'REJECTED');
-    addToast(`Rejected attendance for ${name}.`, 'error');
     try {
-      await fetch('/api/attendance', {
+      const res = await fetch('/api/attendance', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: 'REJECTED' }),
       });
-      fetchLiveAttendance();
-    } catch (err) {
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server error (HTTP ${res.status})`);
+      }
+      addToast(`Rejected attendance for ${name}.`, 'error');
+      await fetchLiveAttendance();
+    } catch (err: any) {
       console.error('Failed to sync rejection with server:', err);
+      addToast(`Failed to reject ${name}: ${err.message || 'Server error'}`, 'error');
+      await fetchLiveAttendance();
     }
   };
 
@@ -386,16 +421,22 @@ export default function TeacherDashboardPage() {
     }
     const ids = pendingList.map((a) => a.id);
     pendingList.forEach((a) => updateAttendanceStatus(a.id, 'APPROVED'));
-    addToast(`Approved ${pendingList.length} pending attendees!`, 'success');
     try {
-      await fetch('/api/attendance', {
+      const res = await fetch('/api/attendance', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, status: 'APPROVED' }),
       });
-      fetchLiveAttendance();
-    } catch (err) {
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server error (HTTP ${res.status})`);
+      }
+      addToast(`Approved ${pendingList.length} pending attendees!`, 'success');
+      await fetchLiveAttendance();
+    } catch (err: any) {
       console.error('Failed to sync bulk approval with server:', err);
+      addToast(`Bulk approval failed: ${err.message || 'Server error'}`, 'error');
+      await fetchLiveAttendance();
     }
   };
 
@@ -974,20 +1015,14 @@ export default function TeacherDashboardPage() {
 
                   <button
                     type="button"
-                    onClick={() => handleDeleteWorkshop(selectedWorkshopId)}
-                    title="Delete currently selected workshop"
+                    onClick={() => {
+                      const currentWs = workshops.find((w) => w.id === selectedWorkshopId);
+                      if (currentWs) setWorkshopToDelete(currentWs);
+                    }}
+                    title="Delete currently selected workshop (Cascade with backup)"
                     className="p-1.5 sm:p-2 rounded-full bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 hover:text-rose-100 transition-all cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleDeleteAllWorkshops}
-                    title="Delete all existing workshops"
-                    className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 hover:text-rose-200 transition-all cursor-pointer"
-                  >
-                    Delete All
                   </button>
                 </div>
               )}
@@ -2074,6 +2109,51 @@ export default function TeacherDashboardPage() {
           setIsNewWorkshopModalOpen(false);
         }}
       />
+
+      {/* Workshop Safe Cascade Deletion Confirmation Modal */}
+      {workshopToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-rose-500/30 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Confirm Workshop Deletion</h3>
+                <p className="text-xs text-slate-400">{workshopToDelete.title} ({workshopToDelete.id})</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-500/20 text-rose-200 text-xs leading-relaxed space-y-2">
+              <p className="font-semibold">
+                Deleting this workshop/session will also delete its linked attendance records and unpublished certificate records. This action cannot be undone. Continue?
+              </p>
+              <p className="text-[11px] text-slate-300">
+                A recoverable backup will be created automatically before deletion. Published certificates are permanently protected and will not be deleted.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setWorkshopToDelete(null)}
+                disabled={isDeletingWorkshop}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white/[0.08] hover:bg-white/[0.15] text-slate-300 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteWorkshop}
+                disabled={isDeletingWorkshop}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingWorkshop ? 'Deleting...' : 'Delete Workshop & Cascade'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Automatic 15-Minute Inactivity Tracker */}
       <InactivityTracker role="teacher" timeoutMinutes={15} />

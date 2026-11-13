@@ -1,0 +1,57 @@
+{
+  "deletedAt": "2026-11-04T12:52:22.799Z",
+  "deletedBy": "techno3deepak@gmail.com",
+  "workshopId": "WS-TEST-CASCADE-HTTP",
+  "workshop": {
+    "id": "WS-TEST-CASCADE-HTTP",
+    "title": "Cascade Deletion Automated Test Workshop",
+    "category": "Web Dev",
+    "trainer": "Test Lead",
+    "trainerRole": "Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Test Lab",
+    "capacity": 30,
+    "price": 0,
+    "status": "Ongoing",
+    "tags": [
+      "Test"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-TEST-CASCADE-HTTP-1",
+        "workshopId": "WS-TEST-CASCADE-HTTP",
+        "sessionTitle": "Session 1: Cascade Verification",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Test Lab",
+        "status": "Scheduled",
+        "isActive": true,
+        "qrToken": "ts_qr_cascade_test_token"
+      }
+    ]
+  },
+  "linkedAttendance": [
+    {
+      "id": "ATT-742727",
+      "workshopId": "WS-TEST-CASCADE-HTTP",
+      "workshopTitle": "Cascade Deletion Automated Test Workshop",
+      "sessionId": "SESS-TEST-CASCADE-HTTP-1",
+      "sessionTitle": "Session 1: Cascade Verification",
+      "studentName": "Cascade Candidate",
+      "studentEmail": "cascade.candidate@example.com",
+      "studentPhone": "9888877777",
+      "studentCourse": "B.Tech IT",
+      "date": "2026-11-04",
+      "time": "06:22 pm",
+      "serverTimestamp": "2026-11-04T12:52:22.727Z",
+      "status": "PENDING_REVIEW",
+      "checkInMethod": "QR Scan",
+      "notes": "Verified Permanent Session QR. Awaiting Admin Approval."
+    }
+  ],
+  "unpublishedCertificates": [],
+  "publishedCertificatesRetained": []
+}

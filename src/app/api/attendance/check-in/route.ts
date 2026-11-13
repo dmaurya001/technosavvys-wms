@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionPermanentQrToken, getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { INITIAL_WORKSHOPS, INITIAL_ATTENDANCE } from '@/data/mockData';
 import { normalizePhoneNumber } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
@@ -23,31 +24,33 @@ export async function POST(request: NextRequest) {
     let foundWorkshop: any = null;
     let foundSession: any = null;
 
-    try {
-      const supabaseAdmin = createAdminClient();
-      const { data: sessionData, error: sessionErr } = await supabaseAdmin
-        .from('workshop_sessions')
-        .select(`
-          id,
-          session_title,
-          session_date,
-          status,
-          workshop_id,
-          workshops (
+    if (isSupabaseConfigured()) {
+      try {
+        const supabaseAdmin = createAdminClient();
+        const { data: sessionData, error: sessionErr } = await supabaseAdmin
+          .from('workshop_sessions')
+          .select(`
             id,
-            title,
-            status
-          )
-        `)
-        .eq('id', sessionId)
-        .single();
+            session_title,
+            session_date,
+            status,
+            workshop_id,
+            workshops (
+              id,
+              title,
+              status
+            )
+          `)
+          .eq('id', sessionId)
+          .single();
 
-      if (!sessionErr && sessionData) {
-        foundSession = sessionData;
-        foundWorkshop = sessionData.workshops;
+        if (!sessionErr && sessionData) {
+          foundSession = sessionData;
+          foundWorkshop = sessionData.workshops;
+        }
+      } catch {
+        // Offline fallback
       }
-    } catch {
-      // Offline fallback
     }
 
     if (!foundSession) {
@@ -191,17 +194,19 @@ export async function POST(request: NextRequest) {
 
     // 5. Prevent Duplicate Attendance for the same student and session
     let isDuplicate = false;
-    try {
-      const supabaseAdmin = createAdminClient();
-      const { data: dupData } = await supabaseAdmin
-        .from('attendance')
-        .select('id, student_id')
-        .eq('session_id', sessionId);
+    if (isSupabaseConfigured()) {
+      try {
+        const supabaseAdmin = createAdminClient();
+        const { data: dupData } = await supabaseAdmin
+          .from('attendance')
+          .select('id, student_id')
+          .eq('session_id', sessionId);
 
-      if (dupData && dupData.length > 0) {
-        // Handled via mock & DB
-      }
-    } catch {}
+        if (dupData && dupData.length > 0) {
+          // Handled via mock & DB
+        }
+      } catch {}
+    }
 
     const existingRecords = await getAllAttendanceRecords({ sessionId });
     const isDupRecord = existingRecords.find(

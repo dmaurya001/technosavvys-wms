@@ -1,73 +1,5 @@
 [
   {
-    "id": "WS-9902",
-    "title": "Cross-Device AI Engineering Masterclass",
-    "category": "AI & ML",
-    "trainer": "Lead Instructor",
-    "trainerRole": "Senior Principal Instructor",
-    "date": "2026-11-04",
-    "time": "10:00 AM - 05:00 PM",
-    "duration": "6 Hours",
-    "location": "Lab 2, Tech Campus / Virtual",
-    "capacity": 100,
-    "enrolledCount": 0,
-    "status": "Ongoing",
-    "price": 0,
-    "description": "Autonomous multi-device synchronized workshop",
-    "tags": [
-      "AI",
-      "Sync"
-    ],
-    "sessions": [
-      {
-        "id": "SESS-WS-9902-1",
-        "workshopId": "WS-9902",
-        "sessionTitle": "Session 1: Production Multi-Agent Systems",
-        "date": "2026-11-04",
-        "startTime": "10:00 AM",
-        "endTime": "05:00 PM",
-        "location": "Lab 2, Tech Campus / Virtual",
-        "status": "Scheduled",
-        "isActive": true,
-        "qrToken": "ts_qr_test_token_9902"
-      }
-    ]
-  },
-  {
-    "id": "WS-9901",
-    "title": "Cross-Device AI Engineering Masterclass",
-    "category": "AI & ML",
-    "trainer": "Lead Instructor",
-    "trainerRole": "Senior Principal Instructor",
-    "date": "2026-11-04",
-    "time": "10:00 AM - 05:00 PM",
-    "duration": "6 Hours",
-    "location": "Lab 2, Tech Campus / Virtual",
-    "capacity": 100,
-    "enrolledCount": 0,
-    "status": "Ongoing",
-    "price": 0,
-    "description": "Autonomous multi-device synchronized workshop",
-    "tags": [
-      "AI",
-      "Sync"
-    ],
-    "sessions": [
-      {
-        "id": "SESS-WS-9901-1",
-        "workshopId": "WS-9901",
-        "sessionTitle": "Session 1: Production Multi-Agent Systems",
-        "date": "2026-11-04",
-        "startTime": "10:00 AM",
-        "endTime": "05:00 PM",
-        "location": "Lab 2, Tech Campus / Virtual",
-        "status": "Scheduled",
-        "isActive": true,
-        "qrToken": "ts_qr_test_token_9901"
-      }
-    ]
-  },
-  {
     "id": "WS-101",
     "title": "Advanced Full-Stack Development with Next.js & Server Actions",
     "category": "Web Dev",
@@ -303,6 +235,202 @@
         "endTime": "04:00 PM",
         "location": "Data Center Training Suite",
         "status": "Scheduled"
+      }
+    ]
+  },
+  {
+    "id": "WS-3572",
+    "title": "xyz",
+    "category": "Web Dev",
+    "trainer": "Lead Instructor",
+    "trainerRole": "Senior Principal Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab 2, Tech Campus / Virtual",
+    "capacity": 100,
+    "enrolledCount": 1,
+    "status": "Ongoing",
+    "price": 0,
+    "description": "Hands-on Web Dev Workshop",
+    "tags": [
+      "Web Dev",
+      "Workshop"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-3572-1",
+        "workshopId": "WS-3572",
+        "sessionTitle": "Session 1: Main Workshop",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab 2, Tech Campus / Virtual",
+        "status": "Live",
+        "isActive": true
+      }
+    ]
+  },
+  {
+    "id": "WS-2770",
+    "title": "xyz",
+    "category": "Web Dev",
+    "trainer": "Lead Instructor",
+    "trainerRole": "Senior Principal Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab 2, Tech Campus / Virtual",
+    "capacity": 100,
+    "enrolledCount": 1,
+    "status": "Ongoing",
+    "price": 0,
+    "description": "Hands-on Web Dev Workshop",
+    "tags": [
+      "Web Dev",
+      "Workshop"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-2770-1",
+        "workshopId": "WS-2770",
+        "sessionTitle": "Session 1: Main Workshop",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab 2, Tech Campus / Virtual",
+        "status": "Live",
+        "isActive": true
+      }
+    ]
+  },
+  {
+    "id": "WS-9902",
+    "title": "Cross-Device AI Engineering Masterclass",
+    "category": "AI & ML",
+    "trainer": "Lead Instructor",
+    "trainerRole": "Senior Principal Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab 2, Tech Campus / Virtual",
+    "capacity": 100,
+    "enrolledCount": 0,
+    "status": "Ongoing",
+    "price": 0,
+    "description": "Autonomous multi-device synchronized workshop",
+    "tags": [
+      "AI",
+      "Sync"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-9902-1",
+        "workshopId": "WS-9902",
+        "sessionTitle": "Session 1: Production Multi-Agent Systems",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab 2, Tech Campus / Virtual",
+        "status": "Scheduled",
+        "isActive": true,
+        "qrToken": "ts_qr_test_token_9902"
+      }
+    ]
+  },
+  {
+    "id": "WS-9901",
+    "title": "Cross-Device AI Engineering Masterclass",
+    "category": "AI & ML",
+    "trainer": "Lead Instructor",
+    "trainerRole": "Senior Principal Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab 2, Tech Campus / Virtual",
+    "capacity": 100,
+    "enrolledCount": 0,
+    "status": "Ongoing",
+    "price": 0,
+    "description": "Autonomous multi-device synchronized workshop",
+    "tags": [
+      "AI",
+      "Sync"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-9901-1",
+        "workshopId": "WS-9901",
+        "sessionTitle": "Session 1: Production Multi-Agent Systems",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab 2, Tech Campus / Virtual",
+        "status": "Scheduled",
+        "isActive": true,
+        "qrToken": "ts_qr_test_token_9901"
+      }
+    ]
+  },
+  {
+    "id": "WS-TEST-SYS-5087",
+    "title": "Automated E2E Test Workshop",
+    "category": "Web Dev",
+    "trainer": "Test Lead",
+    "trainerRole": "Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab Test",
+    "capacity": 50,
+    "price": 0,
+    "status": "Ongoing",
+    "tags": [
+      "Test"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-TEST-SYS-5087-1",
+        "workshopId": "WS-TEST-SYS-5087",
+        "sessionTitle": "Session 1: Main Workshop",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab Test",
+        "status": "Scheduled",
+        "isActive": true,
+        "qrToken": "ts_qr_test_1794549765087"
+      }
+    ]
+  },
+  {
+    "id": "WS-TEST-SYS-5932",
+    "title": "Automated E2E Test Workshop",
+    "category": "Web Dev",
+    "trainer": "Test Lead",
+    "trainerRole": "Instructor",
+    "date": "2026-11-04",
+    "time": "10:00 AM - 05:00 PM",
+    "duration": "6 Hours",
+    "location": "Lab Test",
+    "capacity": 50,
+    "price": 0,
+    "status": "Ongoing",
+    "tags": [
+      "Test"
+    ],
+    "sessions": [
+      {
+        "id": "SESS-WS-TEST-SYS-5932-1",
+        "workshopId": "WS-TEST-SYS-5932",
+        "sessionTitle": "Session 1: Main Workshop",
+        "date": "2026-11-04",
+        "startTime": "10:00 AM",
+        "endTime": "05:00 PM",
+        "location": "Lab Test",
+        "status": "Scheduled",
+        "isActive": true,
+        "qrToken": "ts_qr_test_1794549735932"
       }
     ]
   }
