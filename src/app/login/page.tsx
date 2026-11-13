@@ -119,7 +119,7 @@ export default function CommonLoginPage() {
               <div className="space-y-2.5 pt-2 border-t border-white/[0.08]">
                 <div className="flex items-center gap-2.5 text-xs text-emerald-100/80">
                   <ShieldCheck className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Passwordless Mobile Number &amp; OTP Login</span>
+                  <span>Direct Name &amp; Email Access (No OTP)</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-xs text-emerald-100/80">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
