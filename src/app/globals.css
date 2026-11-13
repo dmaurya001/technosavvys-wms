@@ -331,6 +331,32 @@ nav.tech-nav a.link:hover {
   display: block;
 }
 
+.hero-img-box {
+  width: 100%;
+  max-width: 560px;
+  justify-self: center;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-img {
+  width: 100%;
+  height: auto;
+  border-radius: 20px;
+  border: 1px solid rgba(245, 197, 66, 0.35);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6), 0 0 30px rgba(46, 230, 166, 0.15);
+  display: block;
+  object-fit: cover;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hero-img:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.7), 0 0 35px rgba(245, 197, 66, 0.25);
+}
+
 .about {
   display: flex;
   align-items: center;

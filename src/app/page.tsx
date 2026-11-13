@@ -2,7 +2,6 @@
 
 import React from 'react';
 import Link from 'next/link';
-import Globe from '@/components/Globe';
 
 export default function Home() {
   const scrollTo = (id: string) => {
@@ -58,7 +57,13 @@ export default function Home() {
               Explore Workshop &rarr;
             </button>
           </div>
-          <Globe />
+          <div className="hero-img-box">
+            <img
+              src="/hero-illustration.jpg"
+              alt="Technosavvys Interactive Workshop"
+              className="hero-img"
+            />
+          </div>
         </div>
 
         {/* ABOUT */}
