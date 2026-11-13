@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { Certificate } from '@/types';
-import { INITIAL_CERTIFICATES } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 
@@ -23,12 +22,7 @@ if (!global.__technosavvysCertificates) {
 function safeLoadFromFile(): Certificate[] {
   const mergedMap = new Map<string, Certificate>();
 
-  // 1. Initial seed certificates
-  for (const initCert of INITIAL_CERTIFICATES) {
-    mergedMap.set(initCert.id, initCert);
-  }
-
-  // 2. Try local data file
+  // 1. Try local data file
   try {
     if (fs.existsSync(LOCAL_STORAGE_FILE)) {
       const raw = fs.readFileSync(LOCAL_STORAGE_FILE, 'utf-8').replace(/^\uFEFF/, '');

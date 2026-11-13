@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { AttendanceRecord, AttendanceStatus } from '@/types';
-import { INITIAL_ATTENDANCE } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 
@@ -22,10 +21,6 @@ if (!global.__technosavvysAttendance) {
 
 function safeLoadFromFile(): AttendanceRecord[] {
   const mergedMap = new Map<string, AttendanceRecord>();
-
-  for (const initRec of INITIAL_ATTENDANCE) {
-    mergedMap.set(initRec.id, initRec);
-  }
 
   // 1. Try local data file
   try {
@@ -80,12 +75,6 @@ export function initAttendanceStore() {
     const loaded = safeLoadFromFile();
     memoryAttendance.length = 0;
     memoryAttendance.push(...loaded);
-
-    for (const initRec of INITIAL_ATTENDANCE) {
-      if (!memoryAttendance.some((a) => a.id === initRec.id)) {
-        memoryAttendance.push(initRec);
-      }
-    }
     global.__technosavvysAttendance = memoryAttendance;
   }
 }

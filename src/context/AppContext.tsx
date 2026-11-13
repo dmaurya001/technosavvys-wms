@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Workshop, Student, AttendanceRecord, Certificate, AttendanceStatus, CertificateGrade, WorkshopSession } from '../types';
-import { INITIAL_WORKSHOPS, INITIAL_STUDENTS, INITIAL_ATTENDANCE, INITIAL_CERTIFICATES } from '../data/mockData';
 import { logAuditEvent } from '@/lib/audit';
 
 interface Toast {
@@ -74,20 +73,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch('/api/workshops');
         if (res.ok) {
           const data = await res.json();
-          if (data.success && Array.isArray(data.workshops) && data.workshops.length > 0) {
+          if (data.success && Array.isArray(data.workshops)) {
             if (isMounted) {
-              setWorkshops((prev) => {
-                const map = new Map<string, Workshop>();
-                for (const w of data.workshops) map.set(w.id, w);
-                for (const w of prev) {
-                  if (!map.has(w.id)) map.set(w.id, w);
-                }
-                const merged = Array.from(map.values());
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('technosavvys_workshops', JSON.stringify(merged));
-                }
-                return merged;
-              });
+              setWorkshops(data.workshops);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('technosavvys_workshops', JSON.stringify(data.workshops));
+              }
               return;
             }
           }
@@ -96,13 +87,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.warn('[AppContext] Failed to fetch workshops from server:', err);
       }
 
-      // Fallback to local storage or INITIAL_WORKSHOPS
+      // Fallback to local storage or empty
       try {
         if (typeof window !== 'undefined') {
           const saved = localStorage.getItem('technosavvys_workshops');
           if (saved !== null) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
               if (isMounted) setWorkshops(parsed);
               return;
             }
@@ -111,7 +102,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch {}
 
       if (isMounted) {
-        setWorkshops(INITIAL_WORKSHOPS);
+        setWorkshops([]);
       }
     }
 
@@ -120,9 +111,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, []);
-  const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
-  const [certificates, setCertificates] = useState<Certificate[]>(INITIAL_CERTIFICATES);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [darkMode, setDarkMode] = useState<boolean>(false);
 

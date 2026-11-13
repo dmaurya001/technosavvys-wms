@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySessionPermanentQrToken, getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { INITIAL_WORKSHOPS, INITIAL_ATTENDANCE } from '@/data/mockData';
 import { normalizePhoneNumber } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
 import { saveAttendanceRecord, getAllAttendanceRecords } from '@/lib/attendanceStore';
@@ -65,17 +64,6 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch {}
-    }
-
-    if (!foundSession) {
-      for (const w of INITIAL_WORKSHOPS) {
-        const s = w.sessions?.find((sess) => sess.id === sessionId);
-        if (s) {
-          foundWorkshop = w;
-          foundSession = s;
-          break;
-        }
-      }
     }
 
     // Dynamic resolution for new workshops created in frontend

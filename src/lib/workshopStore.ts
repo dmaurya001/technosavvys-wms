@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { Workshop, WorkshopSession, WorkshopStatus } from '@/types';
-import { INITIAL_WORKSHOPS } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
@@ -23,10 +22,6 @@ if (!global.__technosavvysWorkshops) {
 
 function safeLoadFromFile(): Workshop[] {
   const mergedMap = new Map<string, Workshop>();
-
-  for (const initWs of INITIAL_WORKSHOPS) {
-    mergedMap.set(initWs.id, initWs);
-  }
 
   // 1. Try local data file
   try {
@@ -121,7 +116,13 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
         `)
         .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
+        if (data.length === 0) {
+          memoryWorkshops.length = 0;
+          safeSaveToFile([]);
+          return [];
+        }
+
         const dbWorkshops: Workshop[] = data.map((row) => {
           const wsCode = row.code || row.id;
           const sessions: WorkshopSession[] = (row.workshop_sessions || []).map((s: any) => ({
@@ -170,16 +171,8 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
           };
         });
 
-        // Merge with memory/initial to avoid dropping any active local seeds
-        for (const dbWs of dbWorkshops) {
-          const idx = memoryWorkshops.findIndex((w) => w.id === dbWs.id);
-          if (idx >= 0) {
-            memoryWorkshops[idx] = dbWs;
-          } else {
-            memoryWorkshops.unshift(dbWs);
-          }
-        }
-
+        memoryWorkshops.length = 0;
+        memoryWorkshops.push(...dbWorkshops);
         safeSaveToFile(memoryWorkshops);
         return memoryWorkshops;
       }
