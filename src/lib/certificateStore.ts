@@ -4,6 +4,7 @@ import os from 'os';
 import { Certificate } from '@/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const LOCAL_STORAGE_FILE = path.join(DATA_DIR, 'certificates.json');
@@ -88,6 +89,47 @@ export async function getAllCertificates(filter?: {
 }): Promise<Certificate[]> {
   initCertificateStore();
   let records = [...memoryCertificates];
+
+  // 1. Hostinger / Remote MySQL Integration (Priority 1 if configured)
+  if (isMySQLConfigured()) {
+    try {
+      const rows = await executeMySQLQuery<any[]>(
+        `SELECT * FROM certificates ORDER BY created_at DESC`
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        for (const r of rows) {
+          const mapped: Certificate = {
+            id: r.certificate_no,
+            certificateNo: r.certificate_no,
+            studentId: r.student_id || `STU-${r.certificate_no}`,
+            studentName: r.student_name,
+            studentEmail: r.student_email,
+            studentPhone: r.student_phone || '',
+            workshopId: r.workshop_id,
+            workshopTitle: r.workshop_title,
+            trainer: r.trainer_name || 'Lead Instructor',
+            issueDate: r.issue_date,
+            grade: (r.grade as any) || 'Distinction',
+            status: 'Issued',
+            score: r.score ? Number(r.score.toString().replace('%', '')) : 95,
+          };
+          const idx = records.findIndex(
+            (c) => c.certificateNo === mapped.certificateNo || c.id === mapped.id
+          );
+          if (idx >= 0) {
+            records[idx] = mapped;
+          } else {
+            records.unshift(mapped);
+          }
+        }
+        memoryCertificates = records;
+        global.__technosavvysCertificates = memoryCertificates;
+        safeSaveToFile(records);
+      }
+    } catch (err) {
+      console.warn('[certificateStore] MySQL query error, falling back:', err);
+    }
+  }
 
   if (isSupabaseConfigured()) {
     try {
@@ -204,6 +246,34 @@ export async function saveCertificate(certificate: Certificate): Promise<Certifi
   global.__technosavvysCertificates = memoryCertificates;
   safeSaveToFile(memoryCertificates);
 
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(
+        `INSERT INTO certificates 
+         (certificate_no, student_name, student_email, student_phone, student_course, workshop_id, workshop_title, issue_date, trainer_name, grade, verification_code, score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           student_name=VALUES(student_name), workshop_title=VALUES(workshop_title), grade=VALUES(grade), score=VALUES(score)`,
+        [
+          certificate.certificateNo || certificate.id,
+          certificate.studentName,
+          certificate.studentEmail?.toLowerCase() || '',
+          certificate.studentPhone || '',
+          'ADCA',
+          certificate.workshopId || '',
+          certificate.workshopTitle || 'Workshop',
+          certificate.issueDate || new Date().toISOString().split('T')[0],
+          certificate.trainer || 'Lead Instructor',
+          certificate.grade || 'Distinction',
+          `VRF-${Date.now().toString().slice(-6)}`,
+          String(certificate.score || 95),
+        ]
+      );
+    } catch (err) {
+      console.warn('[certificateStore] MySQL save certificate error:', err);
+    }
+  }
+
   return certificate;
 }
 
@@ -226,6 +296,14 @@ export async function deleteCertificate(
   memoryCertificates = memoryCertificates.filter((c) => c.id !== certificateId);
   global.__technosavvysCertificates = memoryCertificates;
   safeSaveToFile(memoryCertificates);
+
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(`DELETE FROM certificates WHERE certificate_no = ?`, [certificateId]);
+    } catch (err) {
+      console.warn('[certificateStore] MySQL delete certificate error:', err);
+    }
+  }
 
   if (isSupabaseConfigured()) {
     try {
@@ -310,6 +388,14 @@ export async function deleteAllCertificatesByWorkshop(workshopId: string): Promi
 
   global.__technosavvysCertificates = memoryCertificates;
   safeSaveToFile(memoryCertificates);
+
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(`DELETE FROM certificates WHERE workshop_id = ?`, [workshopId]);
+    } catch (err) {
+      console.warn('[certificateStore] MySQL delete certificates error:', err);
+    }
+  }
 
   // Remove from Supabase if configured
   if (isSupabaseConfigured()) {

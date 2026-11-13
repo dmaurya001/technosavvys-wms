@@ -4,6 +4,7 @@ import os from 'os';
 import { AttendanceRecord, AttendanceStatus } from '@/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const LOCAL_STORAGE_FILE = path.join(DATA_DIR, 'attendance-records.json');
@@ -90,6 +91,52 @@ export async function getAllAttendanceRecords(filter?: {
   initAttendanceStore();
 
   let records = [...memoryAttendance];
+
+  // 1. Hostinger / Remote MySQL Integration (Priority 1 if configured)
+  if (isMySQLConfigured()) {
+    try {
+      const rows = await executeMySQLQuery<any[]>(
+        `SELECT * FROM attendance_records ORDER BY created_at DESC`
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        for (const r of rows) {
+          const mapped: AttendanceRecord = {
+            id: r.id,
+            workshopId: r.workshop_id,
+            workshopTitle: r.workshop_title,
+            sessionId: r.session_id,
+            sessionTitle: r.session_title,
+            studentId: r.student_id,
+            studentName: r.student_name,
+            studentEmail: r.student_email,
+            studentPhone: r.student_phone,
+            studentCourse: r.student_course,
+            date: r.date,
+            time: r.time,
+            serverTimestamp: r.server_timestamp,
+            status: r.status as AttendanceStatus,
+            checkInMethod: r.check_in_method as any,
+            notes: r.notes || '',
+          };
+          const idx = records.findIndex(
+            (rec) =>
+              rec.id === mapped.id ||
+              (rec.studentEmail === mapped.studentEmail && rec.sessionId === mapped.sessionId)
+          );
+          if (idx >= 0) {
+            records[idx] = mapped;
+          } else {
+            records.unshift(mapped);
+          }
+        }
+        memoryAttendance = records;
+        global.__technosavvysAttendance = records;
+        safeSaveToFile(records);
+      }
+    } catch (err) {
+      console.warn('[attendanceStore] MySQL query failed, falling back:', err);
+    }
+  }
 
   if (isSupabaseConfigured()) {
     try {
@@ -223,7 +270,40 @@ export async function saveAttendanceRecord(record: AttendanceRecord): Promise<At
   global.__technosavvysAttendance = memoryAttendance;
   safeSaveToFile(memoryAttendance);
 
-  // 2. Persist to Supabase PostgreSQL if configured
+  // 2. Persist to Hostinger / Remote MySQL if configured
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(
+        `INSERT INTO attendance_records 
+         (id, workshop_id, workshop_title, session_id, session_title, student_id, student_name, student_email, student_phone, student_course, date, time, server_timestamp, status, check_in_method, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           status=VALUES(status), notes=VALUES(notes), server_timestamp=VALUES(server_timestamp)`,
+        [
+          record.id,
+          record.workshopId,
+          record.workshopTitle,
+          record.sessionId,
+          record.sessionTitle,
+          record.studentId || null,
+          record.studentName,
+          record.studentEmail,
+          record.studentPhone,
+          record.studentCourse || 'ADCA',
+          record.date,
+          record.time,
+          record.serverTimestamp,
+          record.status || 'PENDING_APPROVAL',
+          record.checkInMethod || 'QR Scan',
+          record.notes || '',
+        ]
+      );
+    } catch (err) {
+      console.warn('[attendanceStore] MySQL save failed:', err);
+    }
+  }
+
+  // 3. Persist to Supabase PostgreSQL if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = createAdminClient();
@@ -308,6 +388,14 @@ export async function updateAttendanceStatusInStore(
   global.__technosavvysAttendance = memoryAttendance;
   safeSaveToFile(memoryAttendance);
 
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(`UPDATE attendance_records SET status = ? WHERE id = ?`, [status, id]);
+    } catch (err) {
+      console.warn('[attendanceStore] MySQL status update failed:', err);
+    }
+  }
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = createAdminClient();
@@ -340,6 +428,15 @@ export async function bulkUpdateAttendanceStatusInStore(
     global.__technosavvysAttendance = memoryAttendance;
     safeSaveToFile(memoryAttendance);
 
+    if (isMySQLConfigured()) {
+      try {
+        const placeholders = ids.map(() => '?').join(',');
+        await executeMySQLQuery(`UPDATE attendance_records SET status = ? WHERE id IN (${placeholders})`, [status, ...ids]);
+      } catch (err) {
+        console.warn('[attendanceStore] MySQL bulk update failed:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createAdminClient();
@@ -369,6 +466,14 @@ export async function deleteAttendanceByWorkshop(workshopId: string): Promise<At
 
   global.__technosavvysAttendance = memoryAttendance;
   safeSaveToFile(memoryAttendance);
+
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(`DELETE FROM attendance_records WHERE workshop_id = ?`, [workshopId]);
+    } catch (err) {
+      console.warn('[attendanceStore] MySQL delete failed:', err);
+    }
+  }
 
   if (isSupabaseConfigured()) {
     try {

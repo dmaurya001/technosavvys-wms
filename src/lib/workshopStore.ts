@@ -4,6 +4,7 @@ import os from 'os';
 import { Workshop, WorkshopSession, WorkshopStatus } from '@/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -92,6 +93,71 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
   for (const fw of fileWorkshops) {
     if (!memoryWorkshops.some((w) => w.id === fw.id)) {
       memoryWorkshops.push(fw);
+    }
+  }
+
+  // 1. Hostinger / Remote MySQL Integration (Priority 1 if configured)
+  if (isMySQLConfigured()) {
+    try {
+      const rows = await executeMySQLQuery<any[]>(
+        `SELECT w.*, 
+                s.id as sess_id, s.session_title, s.date as sess_date, s.start_time, s.end_time, s.location as sess_location, s.status as sess_status, s.qr_token
+         FROM workshops w
+         LEFT JOIN workshop_sessions s ON w.id = s.workshop_id
+         ORDER BY w.created_at DESC`
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        const wsMap = new Map<string, Workshop>();
+        for (const r of rows) {
+          if (!wsMap.has(r.id)) {
+            wsMap.set(r.id, {
+              id: r.id,
+              title: r.title,
+              category: r.category,
+              trainer: r.trainer,
+              trainerRole: r.trainer_role || 'Senior Principal Instructor',
+              date: r.date,
+              time: r.time,
+              duration: r.duration,
+              location: r.location,
+              capacity: r.capacity,
+              price: Number(r.price) || 0,
+              status: r.status,
+              description: r.description || '',
+              tags: typeof r.tags === 'string' && r.tags.startsWith('[') ? JSON.parse(r.tags) : ['Workshop'],
+              enrolledCount: r.enrolled_count || 0,
+              sessions: [],
+            });
+          }
+          if (r.sess_id) {
+            const ws = wsMap.get(r.id)!;
+            if (!ws.sessions.some((s) => s.id === r.sess_id)) {
+              ws.sessions.push({
+                id: r.sess_id,
+                workshopId: r.id,
+                sessionTitle: r.session_title,
+                date: r.sess_date,
+                startTime: r.start_time,
+                endTime: r.end_time,
+                location: r.sess_location,
+                status: r.sess_status,
+                isActive: r.sess_status !== 'Completed' && r.sess_status !== 'Cancelled',
+                qrToken: r.qr_token || getSessionPermanentQrToken(r.id, r.sess_id),
+              });
+            }
+          }
+        }
+        for (const ws of wsMap.values()) {
+          const idx = memoryWorkshops.findIndex((w) => w.id === ws.id);
+          if (idx >= 0) memoryWorkshops[idx] = ws;
+          else memoryWorkshops.unshift(ws);
+        }
+        global.__technosavvysWorkshops = memoryWorkshops;
+        safeSaveToFile(memoryWorkshops);
+        return memoryWorkshops;
+      }
+    } catch (err) {
+      console.warn('[workshopStore] MySQL query error, falling back:', err);
     }
   }
 
@@ -208,7 +274,66 @@ export async function saveWorkshop(workshop: Workshop): Promise<Workshop> {
   }
   safeSaveToFile(memoryWorkshops);
 
-  // 2. Persist to Supabase PostgreSQL if configured
+  // 2. Persist to Hostinger / Remote MySQL if configured
+  if (isMySQLConfigured()) {
+    try {
+      const tagsStr = JSON.stringify(workshop.tags || ['Workshop']);
+      await executeMySQLQuery(
+        `INSERT INTO workshops (id, title, category, trainer, trainer_role, date, time, duration, location, capacity, price, status, description, tags, enrolled_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE 
+           title=VALUES(title), category=VALUES(category), trainer=VALUES(trainer), trainer_role=VALUES(trainer_role),
+           date=VALUES(date), time=VALUES(time), duration=VALUES(duration), location=VALUES(location),
+           capacity=VALUES(capacity), price=VALUES(price), status=VALUES(status), description=VALUES(description),
+           tags=VALUES(tags), enrolled_count=VALUES(enrolled_count)`,
+        [
+          workshop.id,
+          workshop.title,
+          workshop.category,
+          workshop.trainer,
+          workshop.trainerRole || 'Senior Principal Instructor',
+          workshop.date,
+          workshop.time,
+          workshop.duration,
+          workshop.location,
+          workshop.capacity,
+          workshop.price,
+          workshop.status,
+          workshop.description || '',
+          tagsStr,
+          workshop.enrolledCount || 0,
+        ]
+      );
+
+      if (Array.isArray(workshop.sessions)) {
+        for (const s of workshop.sessions) {
+          const qrToken = s.qrToken || getSessionPermanentQrToken(workshop.id, s.id);
+          await executeMySQLQuery(
+            `INSERT INTO workshop_sessions (id, workshop_id, session_title, date, start_time, end_time, location, status, qr_token)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               session_title=VALUES(session_title), date=VALUES(date), start_time=VALUES(start_time),
+               end_time=VALUES(end_time), location=VALUES(location), status=VALUES(status), qr_token=VALUES(qr_token)`,
+            [
+              s.id,
+              workshop.id,
+              s.sessionTitle,
+              s.date,
+              s.startTime,
+              s.endTime,
+              s.location || 'Campus / Virtual Lab',
+              s.status || 'Scheduled',
+              qrToken,
+            ]
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[workshopStore] MySQL save failed:', err);
+    }
+  }
+
+  // 3. Persist to Supabase PostgreSQL if configured
   if (isSupabaseConfigured()) {
     try {
       const supabase = createAdminClient();
@@ -274,6 +399,15 @@ export async function deleteWorkshop(id: string): Promise<boolean> {
   memoryWorkshops = memoryWorkshops.filter((w) => w.id !== id);
   global.__technosavvysWorkshops = memoryWorkshops;
   safeSaveToFile(memoryWorkshops);
+
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(`DELETE FROM workshop_sessions WHERE workshop_id = ?`, [id]);
+      await executeMySQLQuery(`DELETE FROM workshops WHERE id = ?`, [id]);
+    } catch (err) {
+      console.warn('[workshopStore] MySQL delete failed:', err);
+    }
+  }
 
   if (isSupabaseConfigured()) {
     try {
