@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter } from '@/lib/rateLimiter';
 import {
   normalizePhoneNumber,
+  normalizeIdentifier,
   verifyStudentOtp,
   createStudentSessionToken,
 } from '@/lib/studentAuth';
@@ -13,6 +14,7 @@ import {
 } from '@/lib/sessionManager';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { INITIAL_STUDENTS } from '@/data/mockData';
+import { getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { logAuditEvent } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
@@ -23,19 +25,20 @@ export async function POST(request: NextRequest) {
       '127.0.0.1';
 
     const body = await request.json();
-    const { mobileNumber, otp } = body;
+    const { email, mobileNumber, identifier, otp } = body;
 
-    if (!mobileNumber || !otp) {
+    const rawId = email || identifier || mobileNumber;
+    if (!rawId || !otp) {
       return NextResponse.json(
-        { error: 'Mobile number and 6-digit OTP code are required.' },
+        { error: 'Registered email/mobile and 6-digit OTP code are required.' },
         { status: 400 }
       );
     }
 
-    const cleanPhone = normalizePhoneNumber(mobileNumber);
+    const cleanIdentifier = normalizeIdentifier(rawId);
 
-    // Rate limit: Max 5 verification attempts per 5 minutes per IP + Mobile
-    const rateCheck = rateLimiter.check(`otp_verify:${ip}:${cleanPhone}`, 5, 300);
+    // Rate limit: Max 5 verification attempts per 5 minutes per IP + Identifier
+    const rateCheck = rateLimiter.check(`otp_verify:${ip}:${cleanIdentifier}`, 5, 300);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         {
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify OTP
-    const verification = verifyStudentOtp(cleanPhone, otp);
+    const verification = verifyStudentOtp(cleanIdentifier, otp);
     if (!verification.success || !verification.studentId) {
       return NextResponse.json(
         { error: verification.error || 'Invalid or expired OTP code.' },
@@ -56,10 +59,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Reset rate limiter on successful auth
-    rateLimiter.reset(`otp_verify:${ip}:${cleanPhone}`);
-    rateLimiter.reset(`otp_req:${ip}:${cleanPhone}`);
+    rateLimiter.reset(`otp_verify:${ip}:${cleanIdentifier}`);
+    rateLimiter.reset(`otp_req:${ip}:${cleanIdentifier}`);
 
-    // Fetch full student record
+    // Fetch full student record across:
+    // 1. Live Attendance Store
+    // 2. Supabase Students
+    // 3. Mock Dataset fallback
     let studentRecord: {
       id: string;
       name: string;
@@ -70,31 +76,62 @@ export async function POST(request: NextRequest) {
       batch: string;
     } | null = null;
 
+    // 1. Check in Attendance Records
     try {
-      const supabaseAdmin = createAdminClient();
-      const { data, error } = await supabaseAdmin
-        .from('students')
-        .select('*')
-        .eq('id', verification.studentId)
-        .single();
+      const attendance = await getAllAttendanceRecords();
+      const attMatch = attendance.find(
+        (a) =>
+          a.studentId === verification.studentId ||
+          a.id === verification.studentId ||
+          (cleanIdentifier.includes('@') && a.studentEmail && a.studentEmail.toLowerCase() === cleanIdentifier) ||
+          (!cleanIdentifier.includes('@') && a.studentPhone && normalizePhoneNumber(a.studentPhone) === cleanIdentifier)
+      );
 
-      if (!error && data) {
+      if (attMatch) {
         studentRecord = {
-          id: data.id,
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          regNo: data.reg_no,
-          college: data.college,
-          batch: data.batch,
+          id: attMatch.studentId || attMatch.id,
+          name: attMatch.studentName,
+          email: attMatch.studentEmail || (cleanIdentifier.includes('@') ? cleanIdentifier : ''),
+          phone: attMatch.studentPhone || (!cleanIdentifier.includes('@') ? cleanIdentifier : ''),
+          regNo: attMatch.studentRegNo || attMatch.studentId || 'TS-REG',
+          college: attMatch.studentCourse || 'Engineering & Technology',
+          batch: attMatch.date || new Date().toISOString().split('T')[0],
         };
       }
-    } catch {
-      // Offline / fallback
+    } catch {}
+
+    // 2. Check Supabase
+    if (!studentRecord) {
+      try {
+        const supabaseAdmin = createAdminClient();
+        const { data, error } = await supabaseAdmin
+          .from('students')
+          .select('*')
+          .eq('id', verification.studentId)
+          .single();
+
+        if (!error && data) {
+          studentRecord = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            regNo: data.reg_no,
+            college: data.college,
+            batch: data.batch,
+          };
+        }
+      } catch {}
     }
 
+    // 3. Check Mock Dataset
     if (!studentRecord) {
-      const mock = INITIAL_STUDENTS.find((s) => s.id === verification.studentId);
+      const mock = INITIAL_STUDENTS.find(
+        (s) =>
+          s.id === verification.studentId ||
+          (cleanIdentifier.includes('@') && s.email && s.email.toLowerCase() === cleanIdentifier) ||
+          (!cleanIdentifier.includes('@') && s.phone && normalizePhoneNumber(s.phone) === cleanIdentifier)
+      );
       if (mock) {
         studentRecord = {
           id: mock.id,
@@ -149,4 +186,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

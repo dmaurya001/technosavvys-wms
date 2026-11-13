@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyStudentSessionToken } from '@/lib/studentAuth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAllCertificates } from '@/lib/certificateStore';
 import { INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
 import {
   STUDENT_COOKIE_NAME,
@@ -93,6 +94,29 @@ export async function GET(request: NextRequest) {
       }
     } catch {
       // Offline fallback
+    }
+
+    if (certsList.length === 0) {
+      try {
+        const stored = await getAllCertificates({ studentId });
+        if (stored && stored.length > 0) {
+          certsList = stored.map((c) => ({
+            id: c.id,
+            certificateNo: c.certificateNo || c.id,
+            studentId: c.studentId,
+            studentName: c.studentName,
+            workshopId: c.workshopId,
+            workshopTitle: c.workshopTitle || 'Workshop Credential',
+            trainer: c.trainer || 'Lead Instructor',
+            issueDate: c.issueDate || new Date().toISOString().split('T')[0],
+            grade: c.grade || 'Pass',
+            score: c.score,
+            status: c.status || 'Issued',
+            storagePath: c.storagePath || c.pdfUrl || `certificates/${c.id}.pdf`,
+            fileName: c.fileName || `${c.studentName.replace(/\s+/g, '_')}_Certificate.pdf`,
+          }));
+        }
+      } catch {}
     }
 
     if (certsList.length === 0) {

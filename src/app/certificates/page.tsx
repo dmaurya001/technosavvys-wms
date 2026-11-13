@@ -7,6 +7,7 @@ import {
   Sparkles,
   ShieldCheck,
   Phone,
+  Mail,
   User,
   KeyRound,
   Download,
@@ -38,10 +39,13 @@ interface IssuedCertificate {
 }
 
 function CertificatePortalContent() {
-  // Step 1: Input (Name + Phone) -> Step 2: OTP -> Step 3: Results
+  // Step 1: Input (Name + Email/Phone) -> Step 2: OTP -> Step 3: Results
   const [step, setStep] = useState<'input' | 'otp' | 'results'>('input');
+  const [authMethod, setAuthMethod] = useState<'email' | 'mobile'>('email');
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
+  const [maskedContact, setMaskedContact] = useState('');
   const [otpCode, setOtpCode] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
@@ -76,18 +80,28 @@ function CertificatePortalContent() {
         throw new Error('Please enter your registered full name.');
       }
 
-      const cleanPhone = mobileNumber.replace(/\D/g, '');
-      if (cleanPhone.length < 10) {
-        throw new Error('Please enter a valid 10-digit registered mobile number.');
+      const payload: Record<string, string> = {
+        fullName: fullName.trim(),
+      };
+
+      if (authMethod === 'email') {
+        const cleanEmail = email.trim().toLowerCase();
+        if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+          throw new Error('Please enter a valid registered email address.');
+        }
+        payload.email = cleanEmail;
+      } else {
+        const cleanPhone = mobileNumber.replace(/\D/g, '');
+        if (cleanPhone.length < 10) {
+          throw new Error('Please enter a valid 10-digit registered mobile number.');
+        }
+        payload.mobileNumber = cleanPhone.slice(-10);
       }
 
       const res = await fetch('/api/portal/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: fullName.trim(),
-          mobileNumber: cleanPhone.slice(-10),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -95,6 +109,7 @@ function CertificatePortalContent() {
         throw new Error(data.error || 'Failed to send OTP.');
       }
 
+      setMaskedContact(data.maskedEmail || data.maskedPhone || (authMethod === 'email' ? email : mobileNumber));
       setStep('otp');
       setCountdown(45);
       if (data.devOtp || data.simulatedOtp) {
@@ -114,15 +129,20 @@ function CertificatePortalContent() {
     setErrorMsg(null);
 
     try {
-      const cleanPhone = mobileNumber.replace(/\D/g, '').slice(-10);
+      const payload: Record<string, string> = {
+        otp: otpCode.trim(),
+      };
+
+      if (authMethod === 'email') {
+        payload.email = email.trim().toLowerCase();
+      } else {
+        payload.mobileNumber = mobileNumber.replace(/\D/g, '').slice(-10);
+      }
 
       const res = await fetch('/api/portal/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mobileNumber: cleanPhone,
-          otp: otpCode.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -194,6 +214,7 @@ function CertificatePortalContent() {
     setCertificates([]);
     setErrorMsg(null);
     setDevOtpHint(null);
+    setMaskedContact('');
   };
 
   return (
@@ -235,7 +256,7 @@ function CertificatePortalContent() {
             </div>
           )}
 
-          {/* STEP 1: INPUT NAME & MOBILE */}
+          {/* STEP 1: INPUT NAME & EMAIL (OR MOBILE) */}
           {step === 'input' && (
             <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
@@ -255,31 +276,71 @@ function CertificatePortalContent() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-emerald-100/85 mb-1.5">
-                  Registered Mobile Number <span className="text-emerald-400">*</span>
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400/60" />
-                  <input
-                    type="tel"
-                    required
-                    value={mobileNumber}
-                    onChange={(e) => setMobileNumber(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-2xl glass-input placeholder-emerald-100/30 font-mono"
-                    placeholder="9876543210"
-                  />
+              {authMethod === 'email' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-emerald-100/85">
+                      Registered Email Address <span className="text-emerald-400">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAuthMethod('mobile')}
+                      className="text-[11px] text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer"
+                    >
+                      Use Mobile Number instead
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400/60" />
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-2xl glass-input placeholder-emerald-100/30"
+                      placeholder="e.g. aditya.verma@technosavvys.edu"
+                    />
+                  </div>
+                  <p className="text-[11px] text-emerald-100/40 mt-1">
+                    We will send a 6-digit OTP code to your registered email to verify student identity.
+                  </p>
                 </div>
-                <p className="text-[11px] text-emerald-100/40 mt-1">
-                  We will send a 6-digit OTP code to verify student identity.
-                </p>
-              </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-emerald-100/85">
+                      Registered Mobile Number <span className="text-emerald-400">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAuthMethod('email')}
+                      className="text-[11px] text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer"
+                    >
+                      Use Email Address instead
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400/60" />
+                    <input
+                      type="tel"
+                      required
+                      value={mobileNumber}
+                      onChange={(e) => setMobileNumber(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-2xl glass-input placeholder-emerald-100/30 font-mono"
+                      placeholder="9876543210"
+                    />
+                  </div>
+                  <p className="text-[11px] text-emerald-100/40 mt-1">
+                    We will send a 6-digit OTP code to verify student identity.
+                  </p>
+                </div>
+              )}
 
               <div className="pt-2">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:-translate-y-0.5 hover:brightness-105 transition-all disabled:opacity-60"
+                  className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:-translate-y-0.5 hover:brightness-105 transition-all disabled:opacity-60 cursor-pointer"
                 >
                   <KeyRound className="w-4 h-4 text-slate-950" />
                   <span>{isLoading ? 'Sending OTP Code...' : 'Send OTP'}</span>
@@ -292,9 +353,10 @@ function CertificatePortalContent() {
                   type="button"
                   onClick={() => {
                     setFullName('Aditya Verma');
-                    setMobileNumber('9876543210');
+                    setAuthMethod('email');
+                    setEmail('aditya.verma@technosavvys.edu');
                   }}
-                  className="text-xs text-teal-400 hover:text-teal-300 font-medium transition-colors"
+                  className="text-xs text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer"
                 >
                   ⚡ Auto-fill registered student demo (Aditya Verma)
                 </button>
@@ -309,12 +371,14 @@ function CertificatePortalContent() {
                 <div>
                   <span className="text-emerald-100/50 block text-[10px]">VERIFYING STUDENT:</span>
                   <span className="font-semibold text-white">{fullName}</span>
-                  <span className="font-mono text-teal-300 ml-2">({mobileNumber})</span>
+                  <span className="font-mono text-teal-300 ml-2">
+                    ({maskedContact || (authMethod === 'email' ? email : mobileNumber)})
+                  </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setStep('input')}
-                  className="text-xs text-emerald-400 hover:text-emerald-300"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer"
                 >
                   Change
                 </button>

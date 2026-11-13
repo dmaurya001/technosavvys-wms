@@ -41,6 +41,18 @@ export function maskPhone(phone: string): string {
   return `+91 ******${digits.slice(-4)}`;
 }
 
+/**
+ * Normalizes identifier (email or phone) for uniform lookup and OTP keying
+ */
+export function normalizeIdentifier(val: string): string {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (trimmed.includes('@')) {
+    return trimmed.toLowerCase();
+  }
+  return normalizePhoneNumber(trimmed);
+}
+
 // In-memory OTP storage structure
 interface StoredOtp {
   hash: string;
@@ -61,20 +73,21 @@ const HMAC_SECRET =
 /**
  * Generates a cryptographically random 6-digit OTP
  * and stores a SHA-256 hash valid for 5 minutes.
+ * Accepts either phone number or email address as identifier.
  */
-export function generateStudentOtp(phone: string, studentId: string, fullName: string): string {
-  const cleanPhone = normalizePhoneNumber(phone);
+export function generateStudentOtp(identifier: string, studentId: string, fullName: string): string {
+  const cleanId = normalizeIdentifier(identifier);
   
   // Cryptographically secure 6-digit number between 100000 and 999999
   const otpCode = crypto.randomInt(100000, 1000000).toString();
   
-  // Hash the OTP with phone salt
+  // Hash the OTP with identifier salt
   const hash = crypto
     .createHmac('sha256', HMAC_SECRET)
-    .update(`${cleanPhone}:${otpCode}`)
+    .update(`${cleanId}:${otpCode}`)
     .digest('hex');
 
-  otpStore.set(cleanPhone, {
+  otpStore.set(cleanId, {
     hash,
     expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes validity
     attempts: 0,
@@ -88,31 +101,32 @@ export function generateStudentOtp(phone: string, studentId: string, fullName: s
 /**
  * Verifies a submitted OTP against the stored hash.
  * Enforces maximum 3 incorrect attempts.
+ * Accepts either phone number or email address as identifier.
  */
 export function verifyStudentOtp(
-  phone: string,
+  identifier: string,
   submittedOtp: string
 ): { success: boolean; studentId?: string; fullName?: string; error?: string } {
-  const cleanPhone = normalizePhoneNumber(phone);
-  const record = otpStore.get(cleanPhone);
+  const cleanId = normalizeIdentifier(identifier);
+  const record = otpStore.get(cleanId);
 
   if (!record) {
     return { success: false, error: 'OTP expired or not requested. Please request a new code.' };
   }
 
   if (Date.now() > record.expiresAt) {
-    otpStore.delete(cleanPhone);
+    otpStore.delete(cleanId);
     return { success: false, error: 'OTP has expired. Please request a new code.' };
   }
 
   if (record.attempts >= 3) {
-    otpStore.delete(cleanPhone);
+    otpStore.delete(cleanId);
     return { success: false, error: 'Maximum verification attempts exceeded. Please request a new OTP.' };
   }
 
   const computedHash = crypto
     .createHmac('sha256', HMAC_SECRET)
-    .update(`${cleanPhone}:${submittedOtp.trim()}`)
+    .update(`${cleanId}:${submittedOtp.trim()}`)
     .digest('hex');
 
   // Constant-time comparison to prevent timing attacks
@@ -132,7 +146,7 @@ export function verifyStudentOtp(
 
   // Successfully verified - clear OTP record to prevent replay
   const { studentId, fullName } = record;
-  otpStore.delete(cleanPhone);
+  otpStore.delete(cleanId);
 
   return { success: true, studentId, fullName };
 }
