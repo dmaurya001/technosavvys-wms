@@ -27,6 +27,11 @@ export default function CommonLoginPage() {
       <div className="w-full max-w-5xl relative z-10 space-y-8 sm:space-y-10 my-auto">
         {/* Brand Header */}
         <div className="text-center space-y-3">
+          <Link href="/" className="inline-block hover:scale-105 transition-transform">
+            <div className="w-16 h-16 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-1 mx-auto shadow-[0_0_20px_rgba(245,179,53,0.3)] flex items-center justify-center">
+              <img src="/logo.png" alt="Technosavvys Logo" className="w-full h-full object-contain rounded-full" />
+            </div>
+          </Link>
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-xs font-semibold shadow-glow-emerald backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
             <span>Technosavvys Academic Cloud Platform</span>

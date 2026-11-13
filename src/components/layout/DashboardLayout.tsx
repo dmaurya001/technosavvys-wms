@@ -61,8 +61,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
       {/* Floating Glass Top Navigation Bar */}
       <header className="sticky top-4 z-40 max-w-5xl w-[92%] sm:w-full mx-auto mt-4 px-4 sm:px-6 h-16 rounded-full glass-panel flex items-center justify-between shadow-glass">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-slate-950 font-bold shadow-glow-emerald group-hover:scale-105 transition-transform">
-            <Sparkles className="w-4 h-4 text-slate-950" />
+          <div className="w-9 h-9 rounded-full bg-[#0a2318] border border-[#f5b335]/40 p-0.5 flex items-center justify-center shadow-glow-emerald group-hover:scale-105 transition-transform">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain rounded-full" />
           </div>
           <div>
             <div className="flex items-center gap-2">

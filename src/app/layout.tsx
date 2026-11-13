@@ -4,8 +4,13 @@ import { AppProvider } from '@/context/AppContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export const metadata: Metadata = {
-  title: 'Technosavvys - Workshop Management System',
-  description: 'Enterprise Workshop, Attendance, Student & Certificate Management System',
+  title: 'technosavvys - creating smarter tomorrow!',
+  description: 'A hands-on workshop and community to learn modern technologies, build real projects, and grow together as future-ready creators.',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({
