@@ -230,18 +230,7 @@ function CertificatePortalContent() {
                 </button>
               </div>
 
-              <div className="pt-2 border-t border-white/[0.06] text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFullName('Aditya Verma');
-                    setEmail('aditya.verma@technosavvys.edu');
-                  }}
-                  className="text-xs text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer"
-                >
-                  ⚡ Auto-fill registered student demo (Aditya Verma)
-                </button>
-              </div>
+
             </form>
           )}
 

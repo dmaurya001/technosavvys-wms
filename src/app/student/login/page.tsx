@@ -101,11 +101,6 @@ function StudentLoginContent() {
     }
   };
 
-  const handleQuickDemoStudent = () => {
-    setFullName('Aditya Verma');
-    setEmail('aditya.verma@technosavvys.edu');
-  };
-
   return (
     <div className="tech-page-bg flex flex-col min-h-screen relative overflow-hidden antialiased">
       {/* 3D Atmospheric Emerald Lighting Layers */}
@@ -215,16 +210,7 @@ function StudentLoginContent() {
               </button>
             </div>
 
-            {/* Demo Fill Button */}
-            <div className="pt-3 border-t border-white/[0.08] text-center">
-              <button
-                type="button"
-                onClick={handleQuickDemoStudent}
-                className="text-xs text-teal-400 hover:text-teal-300 font-medium transition-colors cursor-pointer"
-              >
-                ⚡ Auto-fill registered student demo (Aditya Verma)
-              </button>
-            </div>
+
           </form>
         </div>
 
