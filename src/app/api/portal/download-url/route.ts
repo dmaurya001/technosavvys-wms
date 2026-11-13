@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
     // STRICT AUTHORIZATION CHECK (Prevent Unauthorized Access / IDOR)
     const isAuthorized =
       certRecord.studentId === studentId ||
+      (certRecord.studentEmail && sessionPayload.email && certRecord.studentEmail.toLowerCase().trim() === sessionPayload.email.toLowerCase().trim()) ||
       ((certRecord as any).studentName && sessionPayload.name && normalizeStudentName((certRecord as any).studentName) === normalizeStudentName(sessionPayload.name));
 
     if (!isAuthorized) {

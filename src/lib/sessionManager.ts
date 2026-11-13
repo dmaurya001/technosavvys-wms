@@ -24,6 +24,7 @@ export interface StudentSession extends BaseSession {
   studentId: string;
   name: string;
   phone: string;
+  email?: string;
   regNo: string;
 }
 
@@ -128,6 +129,7 @@ export function createStudentSession(student: {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   regNo: string;
 }): { token: string; session: StudentSession } {
   const now = Date.now();
@@ -138,7 +140,8 @@ export function createStudentSession(student: {
     role: 'student',
     studentId: student.id,
     name: student.name,
-    phone: student.phone.replace(/\D/g, '').slice(-10),
+    phone: (student.phone || '').replace(/\D/g, '').slice(-10),
+    email: student.email ? student.email.trim().toLowerCase() : undefined,
     regNo: student.regNo,
     createdAt: now,
     lastActiveAt: now,

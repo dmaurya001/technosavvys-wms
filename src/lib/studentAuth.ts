@@ -162,6 +162,7 @@ export interface StudentSessionPayload {
   studentId: string;
   name: string;
   phone: string;
+  email?: string;
   regNo: string;
   exp: number;
   iat: number;
@@ -179,6 +180,7 @@ export function createStudentSessionToken(student: {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   regNo: string;
 }): string {
   const { token } = createStudentSession(student);

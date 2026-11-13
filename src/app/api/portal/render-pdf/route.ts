@@ -1,8 +1,14 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyStudentSessionToken, normalizeStudentName } from '@/lib/studentAuth';
 import { INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAllCertificates } from '@/lib/certificateStore';
+
+const PDF_DIR = path.join(process.cwd(), 'data', 'pdf-certificates');
+const TMP_PDF_DIR = path.join(os.tmpdir(), 'technosavvys-pdf-certificates');
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,10 +69,31 @@ export async function GET(request: NextRequest) {
     // Strict Authorization Check
     const isAuthorized =
       cert.studentId === payload.studentId ||
+      (cert.studentEmail && payload.email && cert.studentEmail.toLowerCase().trim() === payload.email.toLowerCase().trim()) ||
       (cert.studentName && payload.name && normalizeStudentName(cert.studentName) === normalizeStudentName(payload.name));
 
     if (!isAuthorized) {
       return new NextResponse('Forbidden: Access Denied to unauthorized certificate.', { status: 403 });
+    }
+
+    const downloadFileName = cert.fileName || `${cert.certificateNo || 'Certificate'}.pdf`;
+
+    // 1. Deliver actual binary PDF file if available on disk
+    const localPdfPath = path.join(PDF_DIR, `${certId}.pdf`);
+    const tmpPdfPath = path.join(TMP_PDF_DIR, `${certId}.pdf`);
+    const existingPdfPath = fs.existsSync(localPdfPath) ? localPdfPath : (fs.existsSync(tmpPdfPath) ? tmpPdfPath : null);
+
+    if (existingPdfPath) {
+      const fileBytes = fs.readFileSync(existingPdfPath);
+      return new NextResponse(fileBytes, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${downloadFileName.replace(/["\r\n]/g, '')}"`,
+          'Content-Length': fileBytes.length.toString(),
+          'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+        },
+      });
     }
 
     const workshop = INITIAL_WORKSHOPS.find((w) => w.id === cert.workshopId);

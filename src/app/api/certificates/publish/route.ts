@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import { extractAndValidateSession } from '@/lib/sessionManager';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -7,6 +10,9 @@ import { saveCertificate } from '@/lib/certificateStore';
 import { normalizeStudentName } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
 import { Certificate } from '@/types';
+
+const PDF_DIR = path.join(process.cwd(), 'data', 'pdf-certificates');
+const TMP_PDF_DIR = path.join(os.tmpdir(), 'technosavvys-pdf-certificates');
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,15 +89,28 @@ export async function POST(request: NextRequest) {
       const storagePath = `certificates/${workshopId}_${studentId}_${Date.now()}.pdf`;
 
       // 2. Upload PDF to private Supabase Storage if configured and fileBase64 provided
-      if (supabaseAdmin && item.fileBase64) {
+      if (item.fileBase64) {
         try {
           const buffer = Buffer.from(item.fileBase64, 'base64');
-          await supabaseAdmin.storage
-            .from('certificates')
-            .upload(storagePath, buffer, {
-              contentType: 'application/pdf',
-              upsert: true,
-            });
+
+          // Persist PDF locally / in tmp for instant authentic delivery
+          try {
+            if (!fs.existsSync(PDF_DIR)) fs.mkdirSync(PDF_DIR, { recursive: true });
+            fs.writeFileSync(path.join(PDF_DIR, `${certId}.pdf`), buffer);
+          } catch {}
+          try {
+            if (!fs.existsSync(TMP_PDF_DIR)) fs.mkdirSync(TMP_PDF_DIR, { recursive: true });
+            fs.writeFileSync(path.join(TMP_PDF_DIR, `${certId}.pdf`), buffer);
+          } catch {}
+
+          if (supabaseAdmin) {
+            await supabaseAdmin.storage
+              .from('certificates')
+              .upload(storagePath, buffer, {
+                contentType: 'application/pdf',
+                upsert: true,
+              });
+          }
         } catch (err) {
           console.warn('[Certificate Publish] Storage upload warning:', err);
         }

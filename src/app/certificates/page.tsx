@@ -112,13 +112,20 @@ function CertificatePortalContent() {
         throw new Error(data.error || 'Failed to generate secure download link.');
       }
 
-      // Trigger automatic browser download
+      // Trigger automatic browser download across desktop & mobile
       const downloadLink = document.createElement('a');
       downloadLink.href = data.signedUrl;
       downloadLink.download = data.fileName || `${cert.certificateNo}.pdf`;
+      downloadLink.target = '_blank';
+      downloadLink.rel = 'noopener noreferrer';
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+
+      // Instant direct navigation fallback for mobile browsers
+      setTimeout(() => {
+        window.location.href = data.signedUrl;
+      }, 150);
     } catch (err: any) {
       alert(err.message || 'Download error. Please re-authenticate.');
     } finally {

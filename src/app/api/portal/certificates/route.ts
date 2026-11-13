@@ -100,11 +100,14 @@ export async function GET(request: NextRequest) {
       try {
         const allStored = await getAllCertificates();
         const matchedStored = allStored.filter((c) => {
+          if (sessionPayload.email && c.studentEmail) {
+            return c.studentEmail.trim().toLowerCase() === sessionPayload.email.trim().toLowerCase();
+          }
           if (c.studentId === studentId) return true;
           if (sessionPayload.name && c.studentName) {
             const cNorm = normalizeStudentName(c.studentName);
             const pNorm = normalizeStudentName(sessionPayload.name);
-            if (cNorm === pNorm || cNorm.includes(pNorm) || pNorm.includes(cNorm)) return true;
+            if (cNorm === pNorm) return true;
           }
           return false;
         });
@@ -132,11 +135,14 @@ export async function GET(request: NextRequest) {
     if (certsList.length === 0) {
       // Fallback to mock certificates matching studentId or studentName
       const matched = INITIAL_CERTIFICATES.filter((c) => {
+        if (sessionPayload.email && c.studentEmail) {
+          return c.studentEmail.trim().toLowerCase() === sessionPayload.email.trim().toLowerCase();
+        }
         if (c.studentId === studentId && c.status === 'Issued') return true;
         if (sessionPayload.name && c.studentName) {
           const cNorm = normalizeStudentName(c.studentName);
           const pNorm = normalizeStudentName(sessionPayload.name);
-          if (cNorm === pNorm || cNorm.includes(pNorm) || pNorm.includes(cNorm)) return true;
+          if (cNorm === pNorm) return true;
         }
         return false;
       });

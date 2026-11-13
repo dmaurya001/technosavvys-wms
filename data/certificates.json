@@ -1,1 +1,19 @@
-[]
+[
+  {
+    "id": "CERT-8095-7695",
+    "certificateNo": "TECH-2026-2235",
+    "studentId": "ATT-555822",
+    "studentName": "deepak m",
+    "studentEmail": "dm123@gmail.com",
+    "studentPhone": "9898989890",
+    "workshopId": "WS-7745",
+    "workshopTitle": "xy",
+    "trainer": "Lead Instructor",
+    "issueDate": "2026-11-13",
+    "grade": "Distinction",
+    "status": "Issued",
+    "score": 95,
+    "storagePath": "certificates/WS-7745_ATT-555822_1794562588095.pdf",
+    "fileName": "Deepak m.pdf"
+  }
+]
