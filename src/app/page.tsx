@@ -62,7 +62,10 @@ export default function Home() {
         <div>
           <h3>About the Workshop</h3>
           <p>
-            technosavvys is a technology workshop and learning community that offers practical, project-based sessions, mentorship, and a collaborative space to build real-world solutions.
+            Technosavvys Education Technology began in 2023 with a simple observation—many students were learning concepts but not gaining the confidence to apply them. What started as a small initiative quickly evolved into a learning space where curiosity drives progress.
+          </p>
+          <p style={{ marginTop: '10px' }}>
+            From the beginning, our mission has been to bridge the gap between classroom learning and real-world execution.
           </p>
         </div>
         <div className="founded">
