@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS `workshop_sessions` (
   `start_time` VARCHAR(50) NOT NULL DEFAULT '10:00 AM',
   `end_time` VARCHAR(50) NOT NULL DEFAULT '05:00 PM',
   `location` VARCHAR(255) NOT NULL DEFAULT 'Campus / Virtual Lab',
-  `status` ENUM('Scheduled', 'In Progress', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Scheduled',
+  `status` ENUM('Scheduled', 'Live', 'In Progress', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Scheduled',
   `qr_token` VARCHAR(255) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

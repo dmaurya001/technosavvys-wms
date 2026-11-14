@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Workshop, Student, AttendanceRecord, Certificate, AttendanceStatus, CertificateGrade, WorkshopSession } from '../types';
 import { logAuditEvent } from '@/lib/audit';
+import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 
 interface Toast {
   id: string;
@@ -297,6 +298,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             endTime: workshopData.time.split('-')[1]?.trim() || '04:00 PM',
             location: workshopData.location,
             status: 'Scheduled',
+            qrToken: getSessionPermanentQrToken(newId, `SESS-${newId}-1`),
           }
         ];
 
@@ -421,17 +423,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...sessionData,
       id: newSessionId,
       workshopId,
+      qrToken: getSessionPermanentQrToken(workshopId, newSessionId),
     };
 
+    let updatedWorkshop: Workshop | undefined;
+
     setWorkshops((prev) => {
-      const next = prev.map((w) =>
-        w.id === workshopId
-          ? { ...w, sessions: [...w.sessions, newSession] }
-          : w
-      );
+      const next = prev.map((w) => {
+        if (w.id === workshopId) {
+          updatedWorkshop = { ...w, sessions: [...(w.sessions || []), newSession] };
+          return updatedWorkshop;
+        }
+        return w;
+      });
       persistWorkshops(next);
       return next;
     });
+
+    if (updatedWorkshop) {
+      fetch('/api/workshops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedWorkshop),
+      }).catch((err) => console.warn('[AppContext] Session sync warning:', err));
+    }
 
     addToast(`Session "${newSession.sessionTitle}" added to ${workshop?.title}!`, 'success');
     logAuditEvent({
@@ -456,8 +471,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleSessionActive = (sessionId: string): boolean => {
     let nowActive = true;
-    setWorkshops((prev) =>
-      prev.map((w) => {
+    let targetWorkshop: Workshop | undefined;
+
+    setWorkshops((prev) => {
+      const next = prev.map((w) => {
         const hasSession = w.sessions?.some((s) => s.id === sessionId);
         if (!hasSession) return w;
         const updatedSessions = w.sessions.map((s) => {
@@ -472,9 +489,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return s;
         });
-        return { ...w, sessions: updatedSessions };
-      })
-    );
+        targetWorkshop = { ...w, sessions: updatedSessions };
+        return targetWorkshop;
+      });
+      persistWorkshops(next);
+      return next;
+    });
+
+    if (targetWorkshop) {
+      fetch('/api/workshops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetWorkshop),
+      }).catch((err) => console.warn('[AppContext] Session toggle sync warning:', err));
+    }
+
     addToast(
       nowActive
         ? 'Workshop session is now LIVE and accepting attendance.'

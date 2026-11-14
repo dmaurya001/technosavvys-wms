@@ -5,7 +5,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { normalizePhoneNumber } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
 import { saveAttendanceRecord, getAllAttendanceRecords } from '@/lib/attendanceStore';
-import { getAllWorkshops, saveWorkshop } from '@/lib/workshopStore';
+import { getAllWorkshops } from '@/lib/workshopStore';
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,55 +64,6 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch {}
-    }
-
-    // Dynamic resolution for new workshops created in frontend
-    if (!foundSession && sessionId && token) {
-      const rawWsId = sessionId.replace(/^SESS-/, '').replace(/-\d+$/, '');
-      const candidateWsIds = [
-        body.workshopId,
-        rawWsId,
-        rawWsId.startsWith('WS-') ? rawWsId : `WS-${rawWsId}`,
-        sessionId.replace('SESS-', ''),
-      ].filter(Boolean) as string[];
-
-      for (const candidateId of candidateWsIds) {
-        if (
-          verifySessionPermanentQrToken(candidateId, sessionId, token) ||
-          token === getSessionPermanentQrToken(candidateId, sessionId)
-        ) {
-          foundSession = {
-            id: sessionId,
-            workshopId: candidateId,
-            sessionTitle: body.sessionTitle || 'Session 1: Main Workshop',
-            date: new Date().toISOString().split('T')[0],
-            startTime: '10:00 AM',
-            endTime: '05:00 PM',
-            location: 'Campus / Virtual Lab',
-            status: 'Live',
-            isActive: true,
-            qrToken: token,
-          };
-          foundWorkshop = {
-            id: candidateId,
-            title: body.workshopTitle || body.course || 'Workshop Session',
-            category: 'Web Dev',
-            trainer: 'Lead Instructor',
-            trainerRole: 'Lead Instructor',
-            date: new Date().toISOString().split('T')[0],
-            time: '10:00 AM - 05:00 PM',
-            duration: '6 Hours',
-            location: 'Campus / Virtual Lab',
-            capacity: 100,
-            price: 0,
-            status: 'Ongoing',
-            tags: ['Workshop'],
-            sessions: [foundSession],
-          };
-          saveWorkshop(foundWorkshop as any).catch(() => {});
-          break;
-        }
-      }
     }
 
     if (!foundSession) {

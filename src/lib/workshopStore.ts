@@ -265,7 +265,62 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
 export async function saveWorkshop(workshop: Workshop): Promise<Workshop> {
   initMemory();
 
-  // 1. Update in-memory & file cache
+  // 1. Persist to Hostinger / Remote MySQL first if configured
+  if (isMySQLConfigured()) {
+    const tagsStr = JSON.stringify(workshop.tags || ['Workshop']);
+    await executeMySQLQuery(
+      `INSERT INTO workshops (id, title, category, trainer, trainer_role, date, time, duration, location, capacity, price, status, description, tags, enrolled_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         title=VALUES(title), category=VALUES(category), trainer=VALUES(trainer), trainer_role=VALUES(trainer_role),
+         date=VALUES(date), time=VALUES(time), duration=VALUES(duration), location=VALUES(location),
+         capacity=VALUES(capacity), price=VALUES(price), status=VALUES(status), description=VALUES(description),
+         tags=VALUES(tags), enrolled_count=VALUES(enrolled_count)`,
+      [
+        workshop.id,
+        workshop.title,
+        workshop.category,
+        workshop.trainer,
+        workshop.trainerRole || 'Senior Principal Instructor',
+        workshop.date,
+        workshop.time,
+        workshop.duration,
+        workshop.location,
+        workshop.capacity,
+        workshop.price,
+        workshop.status,
+        workshop.description || '',
+        tagsStr,
+        workshop.enrolledCount || 0,
+      ]
+    );
+
+    if (Array.isArray(workshop.sessions)) {
+      for (const s of workshop.sessions) {
+        const qrToken = s.qrToken || getSessionPermanentQrToken(workshop.id, s.id);
+        await executeMySQLQuery(
+          `INSERT INTO workshop_sessions (id, workshop_id, session_title, date, start_time, end_time, location, status, qr_token)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             session_title=VALUES(session_title), date=VALUES(date), start_time=VALUES(start_time),
+             end_time=VALUES(end_time), location=VALUES(location), status=VALUES(status), qr_token=VALUES(qr_token)`,
+          [
+            s.id,
+            workshop.id,
+            s.sessionTitle,
+            s.date,
+            s.startTime,
+            s.endTime,
+            s.location || 'Campus / Virtual Lab',
+            s.status || 'Scheduled',
+            qrToken,
+          ]
+        );
+      }
+    }
+  }
+
+  // 2. Update in-memory & file cache only after successful database write (or offline mode)
   const idx = memoryWorkshops.findIndex((w) => w.id === workshop.id);
   if (idx >= 0) {
     memoryWorkshops[idx] = workshop;
@@ -273,65 +328,6 @@ export async function saveWorkshop(workshop: Workshop): Promise<Workshop> {
     memoryWorkshops.unshift(workshop);
   }
   safeSaveToFile(memoryWorkshops);
-
-  // 2. Persist to Hostinger / Remote MySQL if configured
-  if (isMySQLConfigured()) {
-    try {
-      const tagsStr = JSON.stringify(workshop.tags || ['Workshop']);
-      await executeMySQLQuery(
-        `INSERT INTO workshops (id, title, category, trainer, trainer_role, date, time, duration, location, capacity, price, status, description, tags, enrolled_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE 
-           title=VALUES(title), category=VALUES(category), trainer=VALUES(trainer), trainer_role=VALUES(trainer_role),
-           date=VALUES(date), time=VALUES(time), duration=VALUES(duration), location=VALUES(location),
-           capacity=VALUES(capacity), price=VALUES(price), status=VALUES(status), description=VALUES(description),
-           tags=VALUES(tags), enrolled_count=VALUES(enrolled_count)`,
-        [
-          workshop.id,
-          workshop.title,
-          workshop.category,
-          workshop.trainer,
-          workshop.trainerRole || 'Senior Principal Instructor',
-          workshop.date,
-          workshop.time,
-          workshop.duration,
-          workshop.location,
-          workshop.capacity,
-          workshop.price,
-          workshop.status,
-          workshop.description || '',
-          tagsStr,
-          workshop.enrolledCount || 0,
-        ]
-      );
-
-      if (Array.isArray(workshop.sessions)) {
-        for (const s of workshop.sessions) {
-          const qrToken = s.qrToken || getSessionPermanentQrToken(workshop.id, s.id);
-          await executeMySQLQuery(
-            `INSERT INTO workshop_sessions (id, workshop_id, session_title, date, start_time, end_time, location, status, qr_token)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-               session_title=VALUES(session_title), date=VALUES(date), start_time=VALUES(start_time),
-               end_time=VALUES(end_time), location=VALUES(location), status=VALUES(status), qr_token=VALUES(qr_token)`,
-            [
-              s.id,
-              workshop.id,
-              s.sessionTitle,
-              s.date,
-              s.startTime,
-              s.endTime,
-              s.location || 'Campus / Virtual Lab',
-              s.status || 'Scheduled',
-              qrToken,
-            ]
-          );
-        }
-      }
-    } catch (err) {
-      console.warn('[workshopStore] MySQL save failed:', err);
-    }
-  }
 
   // 3. Persist to Supabase PostgreSQL if configured
   if (isSupabaseConfigured()) {

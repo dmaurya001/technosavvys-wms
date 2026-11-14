@@ -2,10 +2,10 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-export const ADMIN_EMAIL = 'techno3deepak@gmail.com';
-export const ADMIN_USERNAME = 'Deepak@8960@techno';
-export const ADMIN_ROLE = 'admin';
-export const ADMIN_NAME = 'Deepak Maurya (Administrator)';
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'techno3deepak@gmail.com';
+export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Deepak@8960@techno';
+export const ADMIN_ROLE = process.env.ADMIN_ROLE || 'admin';
+export const ADMIN_NAME = process.env.ADMIN_NAME || 'Deepak Maurya (Administrator)';
 
 // In-memory credential state with secure PBKDF2 hashing
 interface AdminCredentialState {
