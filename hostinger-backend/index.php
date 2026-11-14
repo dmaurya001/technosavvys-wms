@@ -294,7 +294,7 @@ try {
                 $date = date('Y-m-d');
                 $time = date('h:i a');
                 $serverTimestamp = date('c');
-                $status = 'PENDING_APPROVAL';
+                $status = 'PENDING_REVIEW';
 
                 // Save attendance
                 $ins = $pdo->prepare("INSERT INTO attendance_records 
@@ -403,3 +403,4 @@ try {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
+

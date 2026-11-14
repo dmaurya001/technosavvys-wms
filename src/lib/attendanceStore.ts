@@ -293,7 +293,7 @@ export async function saveAttendanceRecord(record: AttendanceRecord): Promise<At
           record.date,
           record.time,
           record.serverTimestamp,
-          record.status || 'PENDING_APPROVAL',
+          record.status || 'PENDING_REVIEW',
           record.checkInMethod || 'QR Scan',
           record.notes || '',
         ]
