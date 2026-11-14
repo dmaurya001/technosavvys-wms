@@ -65,10 +65,10 @@ interface StoredOtp {
 const otpStore = new Map<string, StoredOtp>();
 
 // Secret key for signing student session tokens
-const HMAC_SECRET =
-  process.env.STUDENT_SESSION_SECRET ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  'technosavvys-student-portal-hmac-secret-key-2026';
+const HMAC_SECRET = process.env.STUDENT_SESSION_SECRET;
+if (!HMAC_SECRET) {
+  throw new Error('STUDENT_SESSION_SECRET is not set');
+}
 
 /**
  * Generates a cryptographically random 6-digit OTP
@@ -83,7 +83,7 @@ export function generateStudentOtp(identifier: string, studentId: string, fullNa
   
   // Hash the OTP with identifier salt
   const hash = crypto
-    .createHmac('sha256', HMAC_SECRET)
+    .createHmac('sha256', HMAC_SECRET!)
     .update(`${cleanId}:${otpCode}`)
     .digest('hex');
 
@@ -125,7 +125,7 @@ export function verifyStudentOtp(
   }
 
   const computedHash = crypto
-    .createHmac('sha256', HMAC_SECRET)
+    .createHmac('sha256', HMAC_SECRET!)
     .update(`${cleanId}:${submittedOtp.trim()}`)
     .digest('hex');
 

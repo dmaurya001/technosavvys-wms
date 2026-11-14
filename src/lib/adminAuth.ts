@@ -2,10 +2,18 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'techno3deepak@gmail.com';
-export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Deepak@8960@techno';
+function requireEnv(name: string): string {
+  const val = process.env[name];
+  if (!val) {
+    throw new Error(`${name} is not set`);
+  }
+  return val;
+}
+
+export const ADMIN_EMAIL = requireEnv('ADMIN_EMAIL');
+export const ADMIN_USERNAME = requireEnv('ADMIN_USERNAME');
 export const ADMIN_ROLE = process.env.ADMIN_ROLE || 'admin';
-export const ADMIN_NAME = process.env.ADMIN_NAME || 'Deepak Maurya (Administrator)';
+export const ADMIN_NAME = requireEnv('ADMIN_NAME');
 
 // In-memory credential state with secure PBKDF2 hashing
 interface AdminCredentialState {
@@ -13,20 +21,9 @@ interface AdminCredentialState {
   hash: string;
 }
 
-// Initial fallback salt & PBKDF2 hash for the provisioned admin account
-function generateInitialHash(password: string): { salt: string; hash: string } {
-  const salt = crypto.randomBytes(32).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-  return { salt, hash };
-}
-
-// Initial state generated securely
-const initialPasswordSource = process.env.ADMIN_INITIAL_PASSWORD || process.env.ADMIN_PASSWORD || ADMIN_USERNAME;
-const defaultCreds = generateInitialHash(initialPasswordSource);
-
 let currentAdminCreds: AdminCredentialState = {
-  salt: process.env.ADMIN_PASSWORD_SALT || defaultCreds.salt,
-  hash: process.env.ADMIN_PASSWORD_HASH || defaultCreds.hash,
+  salt: requireEnv('ADMIN_PASSWORD_SALT'),
+  hash: requireEnv('ADMIN_PASSWORD_HASH'),
 };
 
 /**

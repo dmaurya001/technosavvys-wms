@@ -3,30 +3,37 @@ import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 
-const ADMIN_EMAIL = 'techno3deepak@gmail.com';
-const ADMIN_USERNAME = 'Deepak@8960@techno';
-const ADMIN_NAME = 'Deepak Maurya (Administrator)';
+// Load .env.local
+const envPath = path.resolve(process.cwd(), '.env.local');
+let envVars = {};
+if (fs.existsSync(envPath)) {
+  const raw = fs.readFileSync(envPath, 'utf8');
+  raw.split('\n').forEach((line) => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      let value = match[2] || '';
+      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+      if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+      envVars[match[1]] = value.trim();
+    }
+  });
+}
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || envVars.ADMIN_EMAIL || 'admin@example.com';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || envVars.ADMIN_USERNAME;
+const ADMIN_NAME = process.env.ADMIN_NAME || envVars.ADMIN_NAME;
 
 async function provisionAdminAccount() {
+  if (!ADMIN_USERNAME) {
+    throw new Error('ADMIN_USERNAME is not set in environment');
+  }
+  if (!ADMIN_NAME) {
+    throw new Error('ADMIN_NAME is not set in environment');
+  }
+
   console.log('================================================================');
   console.log('TECHNOSAVVYS WMS - SECURE ADMIN PROVISIONING');
   console.log('================================================================\n');
-
-  // Load .env.local
-  const envPath = path.resolve(process.cwd(), '.env.local');
-  let envVars = {};
-  if (fs.existsSync(envPath)) {
-    const raw = fs.readFileSync(envPath, 'utf8');
-    raw.split('\n').forEach((line) => {
-      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-      if (match) {
-        let value = match[2] || '';
-        if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-        if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
-        envVars[match[1]] = value.trim();
-      }
-    });
-  }
 
   // Determine password from args or env
   const args = process.argv.slice(2);
@@ -39,7 +46,7 @@ async function provisionAdminAccount() {
   }
 
   if (!password) {
-    password = ADMIN_USERNAME; // Default secure provisioning fallback
+    throw new Error('ADMIN_PASSWORD is required via --password argument or ADMIN_PASSWORD environment variable.');
   }
 
   // 1. Generate PBKDF2 hash & salt

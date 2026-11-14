@@ -9,10 +9,10 @@ export const ADMIN_COOKIE_NAME = 'technosavvys_admin_session';
 export const STUDENT_COOKIE_NAME = 'technosavvys_student_session';
 export const LEGACY_STUDENT_COOKIE_NAME = 'technosavvys_student_token';
 
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  process.env.STUDENT_SESSION_SECRET ||
-  'technosavvys-master-session-security-secret-key-2026';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  throw new Error('SESSION_SECRET is not set');
+}
 
 function base64UrlToUint8Array(base64url: string): Uint8Array {
   const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');

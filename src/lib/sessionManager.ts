@@ -40,10 +40,10 @@ export const ADMIN_COOKIE_NAME = 'technosavvys_admin_session';
 export const STUDENT_COOKIE_NAME = 'technosavvys_student_session';
 export const LEGACY_STUDENT_COOKIE_NAME = 'technosavvys_student_token';
 
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  process.env.STUDENT_SESSION_SECRET ||
-  'technosavvys-master-session-security-secret-key-2026';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  throw new Error('SESSION_SECRET is not set');
+}
 
 // Server-side Revoked Sessions Registry (Instant Logout Invalidation)
 // Global map prevents memory loss during fast HMR cycles in development
@@ -113,7 +113,7 @@ export function createTeacherSession(
 
   const payloadBase64 = Buffer.from(JSON.stringify(session)).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', SESSION_SECRET!)
     .update(payloadBase64)
     .digest('base64url');
 
@@ -152,7 +152,7 @@ export function createStudentSession(student: {
 
   const payloadBase64 = Buffer.from(JSON.stringify(session)).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', SESSION_SECRET!)
     .update(payloadBase64)
     .digest('base64url');
 
@@ -187,7 +187,7 @@ export function verifySessionToken(token: string): SessionValidationResult {
   const [payloadBase64, providedSig] = parts;
 
   const expectedSig = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', SESSION_SECRET!)
     .update(payloadBase64)
     .digest('base64url');
 
@@ -259,7 +259,7 @@ export function touchSession(session: AppSession): string {
 
   const payloadBase64 = Buffer.from(JSON.stringify(updatedSession)).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', SESSION_SECRET!)
     .update(payloadBase64)
     .digest('base64url');
 

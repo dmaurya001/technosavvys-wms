@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Workshop, Student, AttendanceRecord, Certificate, AttendanceStatus, CertificateGrade, WorkshopSession } from '../types';
 import { logAuditEvent } from '@/lib/audit';
-import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 
 interface Toast {
   id: string;
@@ -298,7 +297,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             endTime: workshopData.time.split('-')[1]?.trim() || '04:00 PM',
             location: workshopData.location,
             status: 'Scheduled',
-            qrToken: getSessionPermanentQrToken(newId, `SESS-${newId}-1`),
           }
         ];
 
@@ -423,22 +421,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...sessionData,
       id: newSessionId,
       workshopId,
-      qrToken: getSessionPermanentQrToken(workshopId, newSessionId),
     };
 
-    let updatedWorkshop: Workshop | undefined;
+    const updatedWorkshop: Workshop | undefined = workshop
+      ? { ...workshop, sessions: [...(workshop.sessions || []), newSession] }
+      : undefined;
 
-    setWorkshops((prev) => {
-      const next = prev.map((w) => {
-        if (w.id === workshopId) {
-          updatedWorkshop = { ...w, sessions: [...(w.sessions || []), newSession] };
-          return updatedWorkshop;
-        }
-        return w;
-      });
-      persistWorkshops(next);
-      return next;
-    });
+    const next = workshops.map((w) =>
+      w.id === workshopId && updatedWorkshop ? updatedWorkshop : w
+    );
+
+    setWorkshops(next);
+    persistWorkshops(next);
 
     if (updatedWorkshop) {
       fetch('/api/workshops', {
@@ -470,37 +464,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleSessionActive = (sessionId: string): boolean => {
-    let nowActive = true;
-    let targetWorkshop: Workshop | undefined;
+    const workshop = workshops.find((w) => w.sessions?.some((s) => s.id === sessionId));
+    const targetSession = workshop?.sessions?.find((s) => s.id === sessionId);
+    const currentActive =
+      targetSession &&
+      targetSession.isActive !== false &&
+      targetSession.status !== 'Cancelled' &&
+      targetSession.status !== 'Completed';
+    const nowActive = !currentActive;
 
-    setWorkshops((prev) => {
-      const next = prev.map((w) => {
-        const hasSession = w.sessions?.some((s) => s.id === sessionId);
-        if (!hasSession) return w;
-        const updatedSessions = w.sessions.map((s) => {
-          if (s.id === sessionId) {
-            const currentActive = s.isActive !== false && s.status !== 'Cancelled' && s.status !== 'Completed';
-            nowActive = !currentActive;
-            return {
-              ...s,
-              isActive: nowActive,
-              status: (nowActive ? 'Live' : 'Completed') as any,
-            };
-          }
-          return s;
-        });
-        targetWorkshop = { ...w, sessions: updatedSessions };
-        return targetWorkshop;
-      });
-      persistWorkshops(next);
-      return next;
-    });
+    const updatedWorkshop: Workshop | undefined = workshop
+      ? {
+          ...workshop,
+          sessions: workshop.sessions.map((s) =>
+            s.id === sessionId
+              ? {
+                  ...s,
+                  isActive: nowActive,
+                  status: (nowActive ? 'Live' : 'Completed') as any,
+                }
+              : s
+          ),
+        }
+      : undefined;
 
-    if (targetWorkshop) {
+    const next = workshops.map((w) =>
+      w.id === workshop?.id && updatedWorkshop ? updatedWorkshop : w
+    );
+
+    setWorkshops(next);
+    persistWorkshops(next);
+
+    if (updatedWorkshop) {
       fetch('/api/workshops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(targetWorkshop),
+        body: JSON.stringify(updatedWorkshop),
       }).catch((err) => console.warn('[AppContext] Session toggle sync warning:', err));
     }
 

@@ -1,8 +1,7 @@
 import crypto from 'crypto';
 
-const QR_SECRET =
-  process.env.QR_TOKEN_SECRET ||
-  'technosavvys-dynamic-qr-rotation-key-2026';
+const QR_SECRET = process.env.QR_TOKEN_SECRET;
+if (!QR_SECRET) throw new Error('QR_TOKEN_SECRET is not set');
 
 /**
  * Generates a permanent, unique, and cryptographically secure QR token
@@ -10,7 +9,7 @@ const QR_SECRET =
  */
 export function getSessionPermanentQrToken(workshopId: string, sessionId: string): string {
   const hash = crypto
-    .createHmac('sha256', QR_SECRET)
+    .createHmac('sha256', QR_SECRET!)
     .update(`session:${workshopId}:${sessionId}`)
     .digest('hex');
   return `ts_qr_${hash.substring(0, 32)}`;

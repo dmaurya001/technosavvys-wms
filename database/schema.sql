@@ -174,15 +174,6 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
 -- ----------------------------------------------------------------------------
 -- SEED DATA (DEFAULT INITIAL STATE)
 -- ----------------------------------------------------------------------------
-INSERT INTO `admins` (`id`, `username`, `email`, `password_hash`, `password_salt`, `role`)
-VALUES (
-  'ADM-001',
-  'Deepak@8960@techno',
-  'techno3deepak@gmail.com',
-  'ec0a016e5fd3f3ba9617ff37e7136167eeb0d99dcb637c5f48398b6f562d440ed2189075aef73b250039913a0658fbd60565afcaff383bdaa9408c7ba0c90b46',
-  '375bf1a3bdee076d70c05e8bf195ffaab4f11b7fccab97de5badde2244c0e56d',
-  'teacher'
-) ON DUPLICATE KEY UPDATE `username` = VALUES(`username`);
 
 INSERT INTO `workshops` (`id`, `title`, `category`, `trainer`, `trainer_role`, `date`, `time`, `duration`, `location`, `capacity`, `price`, `status`, `description`, `tags`, `enrolled_count`)
 VALUES (
