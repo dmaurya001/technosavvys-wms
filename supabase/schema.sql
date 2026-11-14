@@ -46,8 +46,30 @@ EXCEPTION
 END $$;
 
 -- ==============================================================================
--- 3. PROFILES & ROLE-BASED ACCESS CONTROL (RBAC)
+-- 3. HELPER FUNCTIONS & RBAC
 -- ==============================================================================
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN (
+        SELECT (role = 'admin')
+        FROM public.profiles
+        WHERE id = auth.uid()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.current_role()
+RETURNS user_role AS $$
+BEGIN
+    RETURN (
+        SELECT role
+        FROM public.profiles
+        WHERE id = auth.uid()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT NOT NULL UNIQUE,
@@ -176,11 +198,13 @@ SET public = false,
     allowed_mime_types = ARRAY['application/pdf'];
 
 -- Storage RLS: Admins have full access, authenticated students can read their own certificate
+DROP POLICY IF EXISTS "Admins full access on certificates bucket" ON storage.objects;
 CREATE POLICY "Admins full access on certificates bucket"
     ON storage.objects FOR ALL
     USING (bucket_id = 'certificates' AND public.is_admin())
     WITH CHECK (bucket_id = 'certificates' AND public.is_admin());
 
+DROP POLICY IF EXISTS "Students can read their own certificate PDF" ON storage.objects;
 CREATE POLICY "Students can read their own certificate PDF"
     ON storage.objects FOR SELECT
     USING (
@@ -237,71 +261,56 @@ ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Helper function: check if caller has admin role
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-    RETURN (
-        SELECT (role = 'admin')
-        FROM public.profiles
-        WHERE id = auth.uid()
-    );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Helper function: get current user role
-CREATE OR REPLACE FUNCTION public.current_role()
-RETURNS user_role AS $$
-BEGIN
-    RETURN (
-        SELECT role
-        FROM public.profiles
-        WHERE id = auth.uid()
-    );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- PROFILES POLICIES
+DROP POLICY IF EXISTS "Admins full access on profiles" ON public.profiles;
 CREATE POLICY "Admins full access on profiles"
     ON public.profiles FOR ALL
     USING (public.is_admin() OR auth.uid() = id);
 
 -- WORKSHOPS POLICIES
+DROP POLICY IF EXISTS "Public and users can view published workshops" ON public.workshops;
 CREATE POLICY "Public and users can view published workshops"
     ON public.workshops FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "Admins can manage workshops" ON public.workshops;
 CREATE POLICY "Admins can manage workshops"
     ON public.workshops FOR ALL
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
 -- SESSIONS POLICIES
+DROP POLICY IF EXISTS "Public can view sessions" ON public.workshop_sessions;
 CREATE POLICY "Public can view sessions"
     ON public.workshop_sessions FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "Admins can manage sessions" ON public.workshop_sessions;
 CREATE POLICY "Admins can manage sessions"
     ON public.workshop_sessions FOR ALL
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
 -- STUDENTS POLICIES
+DROP POLICY IF EXISTS "Admins can view and manage all students" ON public.students;
 CREATE POLICY "Admins can view and manage all students"
     ON public.students FOR ALL
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Students can view their own record" ON public.students;
 CREATE POLICY "Students can view their own record"
     ON public.students FOR SELECT
     USING (user_id = auth.uid());
 
 -- ENROLLMENTS POLICIES
+DROP POLICY IF EXISTS "Admins can manage all enrollments" ON public.student_enrollments;
 CREATE POLICY "Admins can manage all enrollments"
     ON public.student_enrollments FOR ALL
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Students can view their enrollments" ON public.student_enrollments;
 CREATE POLICY "Students can view their enrollments"
     ON public.student_enrollments FOR SELECT
     USING (
@@ -311,11 +320,13 @@ CREATE POLICY "Students can view their enrollments"
     );
 
 -- ATTENDANCE POLICIES
+DROP POLICY IF EXISTS "Admins can view and mark attendance" ON public.attendance;
 CREATE POLICY "Admins can view and mark attendance"
     ON public.attendance FOR ALL
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Students can view their attendance logs" ON public.attendance;
 CREATE POLICY "Students can view their attendance logs"
     ON public.attendance FOR SELECT
     USING (
@@ -325,20 +336,24 @@ CREATE POLICY "Students can view their attendance logs"
     );
 
 -- CERTIFICATES POLICIES
+DROP POLICY IF EXISTS "Public can verify valid certificates by serial no" ON public.certificates;
 CREATE POLICY "Public can verify valid certificates by serial no"
     ON public.certificates FOR SELECT
     USING (status = 'Issued');
 
+DROP POLICY IF EXISTS "Admins can issue and manage certificates" ON public.certificates;
 CREATE POLICY "Admins can issue and manage certificates"
     ON public.certificates FOR ALL
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
 -- AUDIT LOGS POLICIES
+DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
 CREATE POLICY "Admins can view audit logs"
     ON public.audit_logs FOR SELECT
     USING (public.is_admin());
 
+DROP POLICY IF EXISTS "System can insert audit logs" ON public.audit_logs;
 CREATE POLICY "System can insert audit logs"
     ON public.audit_logs FOR INSERT
     WITH CHECK (true);
