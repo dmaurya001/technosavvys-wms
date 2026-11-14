@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Workshop, Student, AttendanceRecord, Certificate, AttendanceStatus, CertificateGrade, WorkshopSession } from '../types';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -25,6 +26,8 @@ interface CheckInResult {
 }
 
 interface AppContextType {
+  isLoading: boolean;
+  refreshData: () => Promise<void>;
   workshops: Workshop[];
   students: Student[];
   attendance: AttendanceRecord[];
@@ -64,29 +67,13 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  // Helper to persist workshops
-  const persistWorkshops = (items: Workshop[]) => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('technosavvys_workshops', JSON.stringify(items));
-      } catch {}
-    }
-  };
+  const pathname = usePathname();
 
   // Helper to persist students
   const persistStudents = (items: Student[]) => {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('technosavvys_students', JSON.stringify(items));
-      } catch {}
-    }
-  };
-
-  // Helper to persist attendance into local browser storage
-  const persistAttendance = (records: AttendanceRecord[]) => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('technosavvys_attendance', JSON.stringify(records));
       } catch {}
     }
   };
@@ -100,37 +87,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 1. Initial State loaded directly from localStorage to prevent flash of empty data
-  const [workshops, setWorkshops] = useState<Workshop[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('technosavvys_workshops');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  // Server as sole source of truth (no localStorage initialization)
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
+  // Students and certificates (kept in localStorage as per existing setup)
   const [students, setStudents] = useState<Student[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('technosavvys_students');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('technosavvys_attendance');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -154,93 +119,96 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [darkMode, setDarkMode] = useState<boolean>(false);
 
-  // Sync workshops from server on mount without overwriting local data with empty array
-  useEffect(() => {
-    let isMounted = true;
-    async function loadWorkshops() {
-      // 1. Re-check local cache
-      if (typeof window !== 'undefined') {
-        try {
-          const saved = localStorage.getItem('technosavvys_workshops');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
-              setWorkshops(parsed);
-            }
-          }
-        } catch {}
-      }
-
-      // 2. Fetch from server and merge (NEVER overwrite with empty array)
-      try {
-        const res = await fetch('/api/workshops');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.workshops) && data.workshops.length > 0 && isMounted) {
-            setWorkshops((prev) => {
-              const map = new Map<string, Workshop>();
-              for (const w of prev) { if (w?.id) map.set(w.id, w); }
-              for (const w of data.workshops) { if (w?.id) map.set(w.id, w); }
-              const merged = Array.from(map.values());
-              persistWorkshops(merged);
-              return merged;
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('[AppContext] Failed to fetch workshops from server:', err);
-      }
-    }
-
-    loadWorkshops();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Sync initial attendance from localStorage and server on mount
-  useEffect(() => {
-    let isMounted = true;
-
-    // 1. Immediate local cache retrieval
+  // UI preferences: darkMode
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('technosavvys_attendance');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && isMounted && parsed.length > 0) {
-            setAttendance(parsed);
-          }
+        return localStorage.getItem('technosavvys_dark_mode') === 'true';
+      } catch {}
+    }
+    return false;
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Fetch workshops from server
+  const fetchWorkshopsFromServer = async (): Promise<Workshop[]> => {
+    try {
+      const res = await fetch('/api/workshops', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.workshops)) {
+          setWorkshops(data.workshops);
+          return data.workshops;
         }
+      }
+    } catch (err) {
+      console.warn('[AppContext] Failed to fetch workshops from server:', err);
+    }
+    return [];
+  };
+
+  // Fetch attendance from server
+  const fetchAttendanceFromServer = async (): Promise<AttendanceRecord[]> => {
+    try {
+      const res = await fetch('/api/attendance', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.attendees)) {
+          setAttendance(data.attendees);
+          return data.attendees;
+        }
+      }
+    } catch (err) {
+      console.warn('[AppContext] Failed to fetch attendance from server:', err);
+    }
+    return [];
+  };
+
+  const refreshData = async (): Promise<void> => {
+    await Promise.all([fetchWorkshopsFromServer(), fetchAttendanceFromServer()]);
+  };
+
+  // Mount effect: purge legacy localStorage keys and fetch initial server data
+  useEffect(() => {
+    let isMounted = true;
+
+    // Purge legacy local storage keys
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('technosavvys_workshops');
+        localStorage.removeItem('technosavvys_attendance');
       } catch {}
     }
 
-    // 2. Merge server-side attendance records without overwriting local state
-    async function loadInitialAttendance() {
+    async function loadInitial() {
       try {
-        const res = await fetch('/api/attendance');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.attendees) && isMounted && data.attendees.length > 0) {
-            setAttendance((prev) => {
-              const map = new Map<string, AttendanceRecord>();
-              for (const r of prev) { if (r?.id) map.set(r.id, r); }
-              for (const r of data.attendees) { if (r?.id) map.set(r.id, r); }
-              const merged = Array.from(map.values());
-              persistAttendance(merged);
-              return merged;
-            });
-          }
+        await Promise.all([
+          fetchWorkshopsFromServer(),
+          fetchAttendanceFromServer(),
+        ]);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
         }
-      } catch {}
+      }
     }
-    loadInitialAttendance();
+
+    loadInitial();
+
     return () => {
       isMounted = false;
     };
   }, []);
+
+  // Sync on navigation to protected routes (e.g. after login)
+  useEffect(() => {
+    if (pathname && (pathname.startsWith('/teacher') || pathname.startsWith('/attendance') || pathname === '/workshops')) {
+      fetchWorkshopsFromServer();
+      fetchAttendanceFromServer();
+    }
+  }, [pathname]);
 
   // Load students & certificates from localStorage on mount
   useEffect(() => {
@@ -260,8 +228,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Sync dark class on html
+  // Sync dark class on html and persist UI preference
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('technosavvys_dark_mode', darkMode ? 'true' : 'false');
+      } catch {}
+    }
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -307,20 +280,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sessions: defaultSessions,
     };
 
-    setWorkshops((prev) => {
-      const next = [newWorkshop, ...prev];
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('technosavvys_workshops', JSON.stringify(next));
-      }
-      return next;
-    });
+    setWorkshops((prev) => [newWorkshop, ...prev]);
 
-    // Synchronize to Server and Supabase PostgreSQL
+    // Synchronize to Server and re-fetch from server
     fetch('/api/workshops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newWorkshop),
-    }).catch((err) => console.warn('[AppContext] Workshop sync warning:', err));
+      credentials: 'same-origin',
+    })
+      .then(async () => {
+        await fetchWorkshopsFromServer();
+      })
+      .catch((err) => console.warn('[AppContext] Workshop sync warning:', err));
 
     addToast(`Workshop "${newWorkshop.title}" created with ${defaultSessions.length} session(s)!`, 'success');
     logAuditEvent({
@@ -334,26 +306,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateWorkshop = (id: string, updates: Partial<Workshop>) => {
     let updatedObj: Workshop | undefined;
-    setWorkshops((prev) => {
-      const next = prev.map((ws) => {
+    setWorkshops((prev) =>
+      prev.map((ws) => {
         if (ws.id === id) {
           updatedObj = { ...ws, ...updates };
           return updatedObj;
         }
         return ws;
-      });
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('technosavvys_workshops', JSON.stringify(next));
-      }
-      return next;
-    });
+      })
+    );
 
     if (updatedObj) {
       fetch('/api/workshops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedObj),
-      }).catch((err) => console.warn('[AppContext] Workshop update warning:', err));
+        credentials: 'same-origin',
+      })
+        .then(async () => {
+          await fetchWorkshopsFromServer();
+        })
+        .catch((err) => console.warn('[AppContext] Workshop update warning:', err));
     }
 
     addToast('Workshop updated successfully.', 'info');
@@ -367,33 +340,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteWorkshop = async (id: string): Promise<void> => {
     try {
-      const res = await fetch(`/api/workshops?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/workshops?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
       if (!res.ok) {
         addToast('Could not delete on server', 'error');
         return;
       }
+      await Promise.all([fetchWorkshopsFromServer(), fetchAttendanceFromServer()]);
     } catch (err) {
       addToast('Could not delete on server', 'error');
       return;
     }
 
-    setWorkshops((prev) => {
-      const next = prev.filter((ws) => ws.id !== id);
-      persistWorkshops(next);
-      return next;
-    });
-
-    setAttendance((prev) => {
-      const next = prev.filter((a) => a.workshopId !== id && (!a.sessionId || !a.sessionId.includes(id)));
-      persistAttendance(next);
-      return next;
-    });
-
-    setCertificates((prev) => {
-      const next = prev.filter((c) => c.workshopId !== id && (!c.workshopId || !c.workshopId.includes(id)));
-      persistCertificates(next);
-      return next;
-    });
+    setWorkshops((prev) => prev.filter((ws) => ws.id !== id));
+    setAttendance((prev) => prev.filter((a) => a.workshopId !== id && (!a.sessionId || !a.sessionId.includes(id))));
+    setCertificates((prev) => prev.filter((c) => c.workshopId !== id && (!c.workshopId || !c.workshopId.includes(id))));
 
     addToast('Workshop and all associated records deleted.', 'info');
     logAuditEvent({
@@ -405,11 +368,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearAllWorkshops = () => {
     setWorkshops([]);
-    persistWorkshops([]);
 
     fetch('/api/workshops?id=all', {
       method: 'DELETE',
-    }).catch((err) => console.warn('[AppContext] Workshop clear warning:', err));
+      credentials: 'same-origin',
+    })
+      .then(async () => {
+        await Promise.all([fetchWorkshopsFromServer(), fetchAttendanceFromServer()]);
+      })
+      .catch((err) => console.warn('[AppContext] Workshop clear warning:', err));
 
     addToast('All existing workshops deleted.', 'info');
     logAuditEvent({
@@ -439,14 +406,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     setWorkshops(next);
-    persistWorkshops(next);
 
     if (updatedWorkshop) {
       fetch('/api/workshops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedWorkshop),
-      }).catch((err) => console.warn('[AppContext] Session sync warning:', err));
+        credentials: 'same-origin',
+      })
+        .then(async () => {
+          await fetchWorkshopsFromServer();
+        })
+        .catch((err) => console.warn('[AppContext] Session sync warning:', err));
     }
 
     addToast(`Session "${newSession.sessionTitle}" added to ${workshop?.title}!`, 'success');
@@ -500,14 +471,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     setWorkshops(next);
-    persistWorkshops(next);
 
     if (updatedWorkshop) {
       fetch('/api/workshops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedWorkshop),
-      }).catch((err) => console.warn('[AppContext] Session toggle sync warning:', err));
+        credentials: 'same-origin',
+      })
+        .then(async () => {
+          await fetchWorkshopsFromServer();
+        })
+        .catch((err) => console.warn('[AppContext] Session toggle sync warning:', err));
     }
 
     addToast(
@@ -554,13 +529,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
 
-    setWorkshops((prev) => {
-      const next = prev.map((w) =>
+    setWorkshops((prev) =>
+      prev.map((w) =>
         w.id === workshopId ? { ...w, enrolledCount: w.enrolledCount + 1 } : w
-      );
-      persistWorkshops(next);
-      return next;
-    });
+      )
+    );
 
     addToast(`${student.name} enrolled into ${workshop.title}`, 'success');
     logAuditEvent({
@@ -596,7 +569,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           serverTimestamp: currentServerTimestamp,
           notes: record.notes,
         };
-        persistAttendance(copy);
         return copy;
       });
       addToast(`Updated attendance for ${record.studentName}: ${record.status}`, 'info');
@@ -607,11 +579,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         time: currentTime,
         serverTimestamp: currentServerTimestamp,
       };
-      setAttendance((prev) => {
-        const next = [newRecord, ...prev];
-        persistAttendance(next);
-        return next;
-      });
+      setAttendance((prev) => [newRecord, ...prev]);
 
       if (record.status === 'Present' || record.status === 'Late') {
         if (record.studentId) {
@@ -771,11 +739,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notes: `Verified QR Scan check-in for session ${session.id}. Pending Admin Review.`,
     };
 
-    setAttendance((prev) => {
-      const next = [newRecord, ...prev];
-      persistAttendance(next);
-      return next;
-    });
+    setAttendance((prev) => [newRecord, ...prev]);
 
     logAuditEvent({
       action: 'MARK_ATTENDANCE',
@@ -800,30 +764,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateAttendanceStatus = (id: string, status: AttendanceStatus) => {
-    setAttendance((prev) => {
-      const next = prev.map((a) => (a.id === id ? { ...a, status } : a));
-      persistAttendance(next);
-      return next;
-    });
+    setAttendance((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+
+    fetch('/api/attendance', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+      credentials: 'same-origin',
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          await fetchAttendanceFromServer();
+        }
+      })
+      .catch((err) => console.warn('[AppContext] Attendance status update warning:', err));
+
     addToast(`Status updated to ${status}`, 'info');
   };
 
   const syncAttendanceWithServer = (serverRecords: AttendanceRecord[]) => {
     if (!Array.isArray(serverRecords)) return;
-    setAttendance((prev) => {
-      // Never wipe out local records if server returns empty list
-      if (serverRecords.length === 0) return prev;
-      const map = new Map<string, AttendanceRecord>();
-      for (const r of prev) {
-        if (r && r.id) map.set(r.id, r);
-      }
-      for (const r of serverRecords) {
-        if (r && r.id) map.set(r.id, r);
-      }
-      const next = Array.from(map.values());
-      persistAttendance(next);
-      return next;
-    });
+    setAttendance(serverRecords);
   };
 
   const bulkMarkAttendance = (workshopId: string, status: AttendanceStatus) => {
@@ -839,33 +800,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const today = new Date().toISOString().split('T')[0];
     const defaultSession = workshop.sessions[0];
 
-    setAttendance((prev) => {
-      // Remove any current records for this workshop on today
-      const otherRecords = prev.filter(
-        (a) => !(a.workshopId === workshopId && a.date === today)
-      );
-      const newRecords: AttendanceRecord[] = enrolledStudents.map((s, idx) => ({
-        id: `ATT-B${Date.now().toString().slice(-4)}-${idx}`,
-        workshopId,
-        workshopTitle: workshop.title,
-        sessionId: defaultSession?.id || `${workshopId}-1`,
-        sessionTitle: defaultSession?.sessionTitle || 'General Session',
-        studentId: s.id,
-        studentName: s.name,
-        studentEmail: s.email,
-        studentPhone: s.phone,
-        studentCourse: s.batch,
-        studentRegNo: s.regNo,
-        date: today,
-        time: nowTime,
-        serverTimestamp: nowServerTimestamp,
-        status,
-        checkInMethod: 'Manual',
-      }));
-      const next = [...newRecords, ...otherRecords];
-      persistAttendance(next);
-      return next;
-    });
+    const otherRecords = attendance.filter(
+      (a) => !(a.workshopId === workshopId && a.date === today)
+    );
+    const newRecords: AttendanceRecord[] = enrolledStudents.map((s, idx) => ({
+      id: `ATT-B${Date.now().toString().slice(-4)}-${idx}`,
+      workshopId,
+      workshopTitle: workshop.title,
+      sessionId: defaultSession?.id || `${workshopId}-1`,
+      sessionTitle: defaultSession?.sessionTitle || 'General Session',
+      studentId: s.id,
+      studentName: s.name,
+      studentEmail: s.email,
+      studentPhone: s.phone,
+      studentCourse: s.batch,
+      studentRegNo: s.regNo,
+      date: today,
+      time: nowTime,
+      serverTimestamp: nowServerTimestamp,
+      status,
+      checkInMethod: 'Manual',
+    }));
+    setAttendance([...newRecords, ...otherRecords]);
+
+    const ids = newRecords.map((r) => r.id);
+    fetch('/api/attendance', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, status }),
+      credentials: 'same-origin',
+    })
+      .then(async () => {
+        await fetchAttendanceFromServer();
+      })
+      .catch((err) => console.warn('[AppContext] Bulk attendance update warning:', err));
 
     addToast(`Bulk marked ${enrolledStudents.length} students as ${status}`, 'success');
   };
@@ -921,6 +889,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider
       value={{
+        isLoading,
+        refreshData,
         workshops,
         students,
         attendance,
@@ -949,7 +919,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         verifyCertificate,
       }}
     >
-      {children}
+      {isLoading ? (
+        <div className="tech-page-bg flex min-h-screen w-full items-center justify-center text-white">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+            <p className="text-sm font-medium text-slate-300">Loading system data from server...</p>
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </AppContext.Provider>
   );
 }
