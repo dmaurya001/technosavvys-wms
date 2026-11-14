@@ -4,9 +4,23 @@ import { cookies } from 'next/headers';
 export async function createClient() {
   const cookieStore = await cookies();
 
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    process.env.STORAGE_URL ||
+    'https://technosavvys-wms.supabase.co';
+
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.STORAGE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.STORAGE_ANON_KEY ||
+    'mock_anon_key';
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://technosavvys-wms.supabase.co',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'mock_anon_key',
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {

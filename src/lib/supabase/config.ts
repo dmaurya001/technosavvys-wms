@@ -3,9 +3,26 @@
  * Distinguishes between active production Supabase instances and mock/placeholder configurations.
  */
 
+export function getSupabaseEnv() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    process.env.STORAGE_URL ||
+    '';
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.STORAGE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.STORAGE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.STORAGE_ANON_KEY ||
+    '';
+  return { url, key };
+}
+
 export function isSupabaseConfigured(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const { url, key } = getSupabaseEnv();
 
   if (!url || !key) return false;
 
@@ -35,8 +52,7 @@ export function getSupabaseConfigStatus(): {
   isPlaceholder: boolean;
   message: string;
 } {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const { url, key } = getSupabaseEnv();
 
   const configured = isSupabaseConfigured();
   const isPlaceholder = !configured && (url.includes('technosavvys-wms.supabase.co') || key.includes('mock_'));
