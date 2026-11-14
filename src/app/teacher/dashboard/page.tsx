@@ -169,15 +169,8 @@ export default function TeacherDashboardPage() {
     if (!workshopToDelete) return;
     try {
       setIsDeletingWorkshop(true);
-      const res = await fetch(`/api/workshops?id=${encodeURIComponent(workshopToDelete.id)}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete workshop');
-      }
+      await deleteWorkshop(workshopToDelete.id);
 
-      deleteWorkshop(workshopToDelete.id);
       const remaining = workshops.filter((w) => w.id !== workshopToDelete.id);
       if (remaining.length > 0) {
         setSelectedWorkshopId(remaining[0].id);
@@ -188,7 +181,6 @@ export default function TeacherDashboardPage() {
         setQrToken('');
         setQrCodeDataUrl('');
       }
-      addToast(`Workshop "${workshopToDelete.title}" and linked records safely deleted with backup.`, 'info');
       setWorkshopToDelete(null);
     } catch (err: any) {
       addToast(err.message || 'Error deleting workshop', 'error');

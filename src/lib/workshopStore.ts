@@ -101,7 +101,7 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
     try {
       const rows = await executeMySQLQuery<any[]>(
         `SELECT w.*, 
-                s.id as sess_id, s.session_title, s.date as sess_date, s.start_time, s.end_time, s.location as sess_location, s.status as sess_status, s.qr_token
+                s.id as sess_id, s.session_title, s.date as sess_date, s.start_time, s.end_time, s.location as sess_location, s.status as sess_status
          FROM workshops w
          LEFT JOIN workshop_sessions s ON w.id = s.workshop_id
          ORDER BY w.created_at DESC`

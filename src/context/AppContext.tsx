@@ -39,7 +39,7 @@ interface AppContextType {
   // Workshop operations
   addWorkshop: (workshop: Omit<Workshop, 'id' | 'enrolledCount' | 'sessions'> & { sessions?: WorkshopSession[] }) => Workshop;
   updateWorkshop: (id: string, updates: Partial<Workshop>) => void;
-  deleteWorkshop: (id: string) => void;
+  deleteWorkshop: (id: string) => Promise<void>;
   clearAllWorkshops: () => void;
   addSessionToWorkshop: (workshopId: string, sessionData: Omit<WorkshopSession, 'id' | 'workshopId'>) => WorkshopSession;
   getSessionById: (sessionId: string) => { session: WorkshopSession; workshop: Workshop } | undefined;
@@ -365,7 +365,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const deleteWorkshop = (id: string) => {
+  const deleteWorkshop = async (id: string): Promise<void> => {
+    try {
+      const res = await fetch(`/api/workshops?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        addToast('Could not delete on server', 'error');
+        return;
+      }
+    } catch (err) {
+      addToast('Could not delete on server', 'error');
+      return;
+    }
+
     setWorkshops((prev) => {
       const next = prev.filter((ws) => ws.id !== id);
       persistWorkshops(next);
@@ -383,10 +394,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       persistCertificates(next);
       return next;
     });
-
-    fetch(`/api/workshops?id=${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    }).catch((err) => console.warn('[AppContext] Workshop delete warning:', err));
 
     addToast('Workshop and all associated records deleted.', 'info');
     logAuditEvent({
