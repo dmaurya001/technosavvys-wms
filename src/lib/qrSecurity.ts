@@ -64,10 +64,7 @@ export function verifyRotatingQrToken(
   if (!token) {
     return { valid: false, error: 'Missing QR security token.' };
   }
-  const isValid =
-    verifySessionPermanentQrToken('default', sessionId, token) ||
-    token.startsWith('ts_qr_') ||
-    token.includes('.');
+  const isValid = verifySessionPermanentQrToken('default', sessionId, token);
 
   return {
     valid: isValid,

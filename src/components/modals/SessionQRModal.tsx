@@ -6,6 +6,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Workshop, WorkshopSession } from '@/types';
+import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import {
   QrCode,
   Download,
@@ -42,7 +43,17 @@ export const SessionQRModal: React.FC<SessionQRModalProps> = ({
     }
   }, []);
 
-  const checkInUrl = session && origin ? `${origin}/checkin/${session.id}` : '';
+  const permToken =
+    session?.qrToken ||
+    (workshop && session ? getSessionPermanentQrToken(workshop.id, session.id) : '');
+  const wsParam = workshop ? encodeURIComponent(workshop.id) : '';
+  const titleParam = workshop ? encodeURIComponent(workshop.title || 'Workshop') : '';
+  const checkInUrl =
+    session && origin && permToken
+      ? `${origin}/attendance/${session.id}?token=${permToken}&ws=${wsParam}&title=${titleParam}`
+      : session && origin
+      ? `${origin}/attendance/${session.id}`
+      : '';
 
   useEffect(() => {
     if (session && checkInUrl) {
