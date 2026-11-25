@@ -278,7 +278,7 @@ export function setSessionCookie(
 ): void {
   const isHttps = request
     ? request.headers.get('x-forwarded-proto') === 'https' || request.nextUrl.protocol === 'https:'
-    : (process.env.VERCEL === '1' || process.env.COOKIE_SECURE === 'true');
+    : process.env.COOKIE_SECURE === 'true';
 
   response.cookies.set(cookieName, token, {
     path: '/',
