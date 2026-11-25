@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 import {
   createTeacherSession,
   setSessionCookie,
@@ -8,8 +9,7 @@ import {
   TEACHER_ABSOLUTE_EXPIRY_MS,
 } from '@/lib/sessionManager';
 import {
-  isAdminIdentifier,
-  verifyAdminPassword,
+  verifyAdminPasswordFromDb,
   ADMIN_EMAIL,
   ADMIN_NAME,
 } from '@/lib/adminAuth';
@@ -33,19 +33,17 @@ export async function POST(request: NextRequest) {
     let role = 'admin';
     let isAuthenticated = false;
 
-    // Check if input matches permanent super-admin (Email or Username)
-    const isAdminAccount = isAdminIdentifier(inputIdentifier);
-
-    if (isAdminAccount) {
-      authenticatedEmail = ADMIN_EMAIL;
-      // 1. Verify against secure server-side salted PBKDF2 hash
-      if (verifyAdminPassword(password)) {
-        isAuthenticated = true;
-      }
+    // 1. Verify against MySQL `admins` table or env salted PBKDF2 hash
+    const adminCheck = await verifyAdminPasswordFromDb(inputIdentifier, password);
+    if (adminCheck.valid) {
+      authenticatedEmail = adminCheck.email;
+      administratorName = adminCheck.name;
+      role = adminCheck.role;
+      isAuthenticated = true;
     }
 
-    // 2. Try Supabase Authentication if not yet verified
-    if (!isAuthenticated) {
+    // 2. Try Supabase Authentication if configured and not yet verified
+    if (!isAuthenticated && isSupabaseConfigured()) {
       try {
         const supabase = await createClient();
         const { data, error } = await supabase.auth.signInWithPassword({

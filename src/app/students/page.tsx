@@ -25,8 +25,10 @@ import {
   Layers,
   CheckCircle2,
   AlertCircle,
-  Filter
+  Filter,
+  Upload
 } from 'lucide-react';
+import ExcelJS from 'exceljs';
 import Link from 'next/link';
 
 export default function StudentsPage() {
@@ -42,6 +44,18 @@ export default function StudentsPage() {
 
   // Modals state
   const [isNewStudentModalOpen, setIsNewStudentModalOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<Array<{
+    name: string;
+    email: string;
+    phone: string;
+    course?: string;
+    college?: string;
+    year?: string;
+  }>>([]);
+  const [importWorkshopId, setImportWorkshopId] = useState<string>('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStatusMsg, setImportStatusMsg] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [enrollWorkshopId, setEnrollWorkshopId] = useState<string>('');
 
@@ -77,6 +91,115 @@ export default function StudentsPage() {
     if (!selectedStudent || !enrollWorkshopId) return;
     enrollStudentInWorkshop(selectedStudent.id, enrollWorkshopId);
     setEnrollWorkshopId('');
+  };
+
+  const handleBulkFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportStatusMsg('');
+
+    try {
+      const parsed: Array<{
+        name: string;
+        email: string;
+        phone: string;
+        course?: string;
+        college?: string;
+        year?: string;
+      }> = [];
+
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        if (lines.length > 1) {
+          const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+            const rowObj: Record<string, string> = {};
+            headers.forEach((h, idx) => {
+              rowObj[h] = cols[idx] || '';
+            });
+            const name = rowObj['name'] || rowObj['student name'] || rowObj['full name'] || '';
+            const email = rowObj['email'] || rowObj['email address'] || '';
+            const phone = rowObj['phone'] || rowObj['mobile'] || rowObj['phone number'] || '';
+            if (name && email) {
+              parsed.push({
+                name,
+                email,
+                phone,
+                course: rowObj['course'] || rowObj['batch'] || 'ADCA',
+                college: rowObj['college'] || 'Campus',
+                year: rowObj['year'] || 'Final Year',
+              });
+            }
+          }
+        }
+      } else {
+        const buf = await file.arrayBuffer();
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf);
+        const ws = wb.worksheets[0];
+        if (ws) {
+          const headerRow: string[] = [];
+          ws.eachRow((row, rowNumber) => {
+            const values = (row.values as any[]).slice(1).map((v) => String(v ?? '').trim());
+            if (rowNumber === 1) {
+              values.forEach((v) => headerRow.push(v.toLowerCase()));
+              return;
+            }
+            const rowObj: Record<string, string> = {};
+            headerRow.forEach((h, idx) => {
+              rowObj[h] = values[idx] || '';
+            });
+            const name = rowObj['name'] || rowObj['student name'] || rowObj['full name'] || '';
+            const email = rowObj['email'] || rowObj['email address'] || '';
+            const phone = rowObj['phone'] || rowObj['mobile'] || rowObj['phone number'] || '';
+            if (name && email) {
+              parsed.push({
+                name,
+                email,
+                phone,
+                course: rowObj['course'] || rowObj['batch'] || 'ADCA',
+                college: rowObj['college'] || 'Campus',
+                year: rowObj['year'] || 'Final Year',
+              });
+            }
+          });
+        }
+      }
+
+      setImportRows(parsed);
+      setImportStatusMsg(parsed.length > 0 ? `Ready to import ${parsed.length} student(s).` : 'No valid rows found (need Name and Email columns).');
+    } catch {
+      setImportStatusMsg('Failed to parse file. Please upload valid .csv or .xlsx.');
+    }
+  };
+
+  const handleConfirmBulkImport = async () => {
+    if (importRows.length === 0) return;
+    setIsImporting(true);
+    setImportStatusMsg('');
+    try {
+      const res = await fetch('/api/students/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          students: importRows,
+          defaultWorkshopId: importWorkshopId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setImportStatusMsg(data.message || 'Students imported successfully.');
+        setImportRows([]);
+      } else {
+        setImportStatusMsg(data.error || 'Import failed.');
+      }
+    } catch {
+      setImportStatusMsg('Network error during bulk import.');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   // Helper: compute workshop-wise attendance for a given student
@@ -119,13 +242,26 @@ export default function StudentsPage() {
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          icon={<Plus className="w-4 h-4" />}
-          onClick={() => setIsNewStudentModalOpen(true)}
-        >
-          Enroll Student
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            icon={<Upload className="w-4 h-4" />}
+            onClick={() => {
+              setImportRows([]);
+              setImportStatusMsg('');
+              setIsBulkImportOpen(true);
+            }}
+          >
+            Bulk Import CSV/Excel
+          </Button>
+          <Button
+            variant="primary"
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => setIsNewStudentModalOpen(true)}
+          >
+            Enroll Student
+          </Button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -502,6 +638,90 @@ export default function StudentsPage() {
         isOpen={isNewStudentModalOpen}
         onClose={() => setIsNewStudentModalOpen(false)}
       />
+
+      {/* Bulk CSV / Excel Import Modal */}
+      {isBulkImportOpen && (
+        <Modal
+          isOpen={isBulkImportOpen}
+          onClose={() => setIsBulkImportOpen(false)}
+          title="Bulk Student Import (.csv / .xlsx)"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Upload a CSV or Excel file with columns: <code className="font-mono font-semibold">Name, Email, Phone, Course, College, Year</code>.
+            </p>
+
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleBulkFileUpload}
+              className="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/15 file:text-emerald-700 dark:file:text-emerald-300 hover:file:bg-emerald-500/25 cursor-pointer"
+            />
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                Optional: Auto-enroll into Workshop
+              </label>
+              <select
+                value={importWorkshopId}
+                onChange={(e) => setImportWorkshopId(e.target.value)}
+                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+              >
+                <option value="">None (Add to Students directory only)</option>
+                {workshops.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {importStatusMsg && (
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-300">
+                {importStatusMsg}
+              </div>
+            )}
+
+            {importRows.length > 0 && (
+              <div className="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/70 text-[10px] uppercase">
+                    <tr>
+                      <th className="p-2">Name</th>
+                      <th className="p-2">Email</th>
+                      <th className="p-2">Phone</th>
+                      <th className="p-2">Course</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {importRows.slice(0, 25).map((r, i) => (
+                      <tr key={i}>
+                        <td className="p-2 font-medium">{r.name}</td>
+                        <td className="p-2">{r.email}</td>
+                        <td className="p-2">{r.phone}</td>
+                        <td className="p-2">{r.course}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setIsBulkImportOpen(false)}>
+                Close
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmBulkImport}
+                disabled={importRows.length === 0 || isImporting}
+              >
+                {isImporting ? 'Importing...' : `Import ${importRows.length} Student(s)`}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

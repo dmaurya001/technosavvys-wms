@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 
 function requireEnv(name: string): string {
   const val = process.env[name];
@@ -38,26 +39,110 @@ export function isAdminIdentifier(identifier: string): boolean {
   );
 }
 
+function verifyPbkdf2(password: string, salt: string, expectedHash: string): boolean {
+  const computedHash = crypto
+    .pbkdf2Sync(password, salt, 100000, 64, 'sha512')
+    .toString('hex');
+
+  const bufA = Buffer.from(computedHash, 'hex');
+  const bufB = Buffer.from(expectedHash, 'hex');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 /**
  * Cryptographically verifies password against stored PBKDF2 hash
  */
 export function verifyAdminPassword(password: string): boolean {
   if (!password || typeof password !== 'string') return false;
+  return verifyPbkdf2(password, currentAdminCreds.salt, currentAdminCreds.hash);
+}
 
-  // Direct env match check if configured
-  if (process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD) {
-    return true;
+/**
+ * Verifies admin credentials against MySQL `admins` table (if configured),
+ * falling back to env PBKDF2 hash and auto-seeding the MySQL `admins` row.
+ */
+export async function verifyAdminPasswordFromDb(
+  identifier: string,
+  password: string
+): Promise<{
+  valid: boolean;
+  email: string;
+  name: string;
+  role: string;
+}> {
+  const clean = (identifier || '').trim().toLowerCase();
+  if (!clean || !password) {
+    return { valid: false, email: ADMIN_EMAIL, name: ADMIN_NAME, role: ADMIN_ROLE };
   }
 
-  const computedHash = crypto
-    .pbkdf2Sync(password, currentAdminCreds.salt, 100000, 64, 'sha512')
-    .toString('hex');
+  if (isMySQLConfigured()) {
+    try {
+      const rows = await executeMySQLQuery<any[]>(
+        `SELECT id, username, email, password_hash, password_salt, role FROM admins WHERE LOWER(email) = ? OR LOWER(username) = ? LIMIT 1`,
+        [clean, clean]
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        const row = rows[0];
+        const ok = verifyPbkdf2(password, row.password_salt, row.password_hash);
+        if (ok) {
+          currentAdminCreds = { salt: row.password_salt, hash: row.password_hash };
+        }
+        return {
+          valid: ok,
+          email: row.email || ADMIN_EMAIL,
+          name: ADMIN_NAME,
+          role: row.role || ADMIN_ROLE,
+        };
+      }
+    } catch (err) {
+      console.warn('[adminAuth] MySQL admin lookup warning:', err);
+    }
+  }
 
-  // Constant-time comparison to prevent timing attacks
-  const bufA = Buffer.from(computedHash, 'hex');
-  const bufB = Buffer.from(currentAdminCreds.hash, 'hex');
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
+  if (isAdminIdentifier(clean) && verifyAdminPassword(password)) {
+    if (isMySQLConfigured()) {
+      try {
+        await executeMySQLQuery(
+          `INSERT INTO admins (id, username, email, password_hash, password_salt, role)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), password_salt = VALUES(password_salt)`,
+          ['ADMIN-PRIMARY', ADMIN_USERNAME, ADMIN_EMAIL, currentAdminCreds.hash, currentAdminCreds.salt, ADMIN_ROLE]
+        );
+      } catch (err) {
+        console.warn('[adminAuth] MySQL admin seed warning:', err);
+      }
+    }
+    return { valid: true, email: ADMIN_EMAIL, name: ADMIN_NAME, role: ADMIN_ROLE };
+  }
+
+  return { valid: false, email: ADMIN_EMAIL, name: ADMIN_NAME, role: ADMIN_ROLE };
+}
+
+/**
+ * Updates admin password in runtime, .env.local (if present), and MySQL `admins` table.
+ */
+export async function updateAdminPasswordInDb(
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const res = updateAdminPassword(newPassword);
+  if (!res.success) return res;
+
+  if (isMySQLConfigured()) {
+    try {
+      await executeMySQLQuery(
+        `INSERT INTO admins (id, username, email, password_hash, password_salt, role)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), password_salt = VALUES(password_salt)`,
+        ['ADMIN-PRIMARY', ADMIN_USERNAME, ADMIN_EMAIL, currentAdminCreds.hash, currentAdminCreds.salt, ADMIN_ROLE]
+      );
+    } catch (err) {
+      console.error('[adminAuth] Failed to persist updated password to MySQL:', err);
+      return { success: false, message: 'Failed to persist new password to database.' };
+    }
+  }
+
+  return res;
 }
 
 /**

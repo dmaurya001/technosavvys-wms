@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     // Generate 6-digit OTP with 5-minute validity
     const otpIdentifier = targetEmail || cleanPhone;
-    const otpCode = generateStudentOtp(otpIdentifier, matchedStudent.id, matchedStudent.name);
+    const otpCode = await generateStudentOtp(otpIdentifier, matchedStudent.id, matchedStudent.name);
 
     // Send OTP via Email if email is available
     const emailToSend = targetEmail || matchedStudent.email;

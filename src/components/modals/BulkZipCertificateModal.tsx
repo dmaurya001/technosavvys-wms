@@ -9,7 +9,7 @@ import { Student, Workshop, BulkZipEntry, ZipItemMatchStatus } from '@/types';
 import { parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
 import { createClient } from '@/lib/supabase/client';
 const logAuditEvent = async (_payload: unknown) => {};
-import { maskEmail, maskPhone } from '@/lib/studentAuth';
+import { maskEmail, maskPhone } from '@/lib/studentHelpers';
 import {
   Upload,
   FileArchive,

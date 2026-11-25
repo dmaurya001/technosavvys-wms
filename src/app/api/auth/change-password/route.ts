@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
 import {
   extractAndValidateSession,
   revokeSession,
@@ -8,8 +9,8 @@ import {
   ADMIN_COOKIE_NAME,
 } from '@/lib/sessionManager';
 import {
-  verifyAdminPassword,
-  updateAdminPassword,
+  verifyAdminPasswordFromDb,
+  updateAdminPasswordInDb,
   ADMIN_EMAIL,
 } from '@/lib/adminAuth';
 import { logAuditEvent } from '@/lib/audit';
@@ -57,17 +58,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Verify current password
-    const isCurrentValid = verifyAdminPassword(currentPassword);
-    if (!isCurrentValid) {
+    // 2. Verify current password against DB/env PBKDF2 hash
+    const currentCheck = await verifyAdminPasswordFromDb(session.email || ADMIN_EMAIL, currentPassword);
+    if (!currentCheck.valid) {
       return NextResponse.json(
         { error: 'Current password verification failed. Please enter your correct current password.' },
         { status: 403 }
       );
     }
 
-    // 3. Update password in admin store (salted PBKDF2)
-    const updateResult = updateAdminPassword(newPassword);
+    // 3. Update password in admin store + MySQL `admins` table
+    const updateResult = await updateAdminPasswordInDb(newPassword);
     if (!updateResult.success) {
       return NextResponse.json(
         { error: updateResult.message },
@@ -75,12 +76,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Update password in Supabase Auth if connected
-    try {
-      const supabase = await createClient();
-      await supabase.auth.updateUser({ password: newPassword });
-    } catch {
-      // Ignored for offline fallback
+    // 4. Update password in Supabase Auth if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = await createClient();
+        await supabase.auth.updateUser({ password: newPassword });
+      } catch {
+        // Ignored for offline fallback
+      }
     }
 
     // 5. Invalidate current session server-side for mandatory re-login

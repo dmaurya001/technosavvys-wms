@@ -10,6 +10,7 @@ import { getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { saveCertificate } from '@/lib/certificateStore';
 import { normalizeStudentName } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
+import { sendCertificateIssuedEmail } from '@/lib/emailService';
 import { Certificate } from '@/types';
 
 const PDF_DIR = path.join(process.cwd(), 'data', 'pdf-certificates');
@@ -205,6 +206,19 @@ export async function POST(request: NextRequest) {
       }
 
       publishedRecords.push(certRecord);
+
+      if (certRecord.studentEmail) {
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin;
+        const certNo = certRecord.certificateNo || certRecord.id;
+        void sendCertificateIssuedEmail({
+          toEmail: certRecord.studentEmail,
+          studentName: certRecord.studentName,
+          workshopTitle: certRecord.workshopTitle || 'Technical Workshop',
+          certificateNo: certNo,
+          verifyUrl: `${siteUrl}/verify/${encodeURIComponent(certNo)}`,
+          portalUrl: `${siteUrl}/student/login`,
+        });
+      }
     }
 
     await logAuditEvent({

@@ -13,25 +13,32 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://technosavvys-wms.supabase.co';
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'mock_anon_key';
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const hasSupabase =
+    Boolean(supabaseUrl && supabaseKey) &&
+    !supabaseUrl.includes('technosavvys-wms.supabase.co') &&
+    !supabaseUrl.includes('placeholder') &&
+    !supabaseKey.includes('mock_');
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        supabaseResponse = NextResponse.next({
-          request,
-        });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
-      },
-    },
-  });
+  const supabase = hasSupabase
+    ? createServerClient(supabaseUrl, supabaseKey, {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+            supabaseResponse = NextResponse.next({
+              request,
+            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          },
+        },
+      })
+    : null;
 
   const pathname = request.nextUrl.pathname;
 
@@ -69,8 +76,8 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Supabase Auth fallback
-  if (!isTeacherAuthenticated) {
+  // Supabase Auth fallback (only when Supabase is configured)
+  if (!isTeacherAuthenticated && supabase) {
     try {
       const { data } = await supabase.auth.getUser();
       if (data?.user) {
@@ -111,7 +118,7 @@ export async function updateSession(request: NextRequest) {
   const isTeacherLogin = pathname === '/teacher/login';
   const isStudentLogin = pathname === '/student/login';
   const isPublicAttendance = pathname.startsWith('/attendance') || pathname.startsWith('/checkin');
-  const isPublicCertificates = pathname.startsWith('/certificates');
+  const isPublicCertificates = pathname.startsWith('/certificates') || pathname.startsWith('/verify');
   const isLegacyPortal = pathname === '/portal';
 
   // Handle Root route "/" & Common Login "/login"

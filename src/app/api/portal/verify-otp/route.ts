@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify OTP
-    const verification = verifyStudentOtp(cleanIdentifier, otp);
+    const verification = await verifyStudentOtp(cleanIdentifier, otp);
     if (!verification.success || !verification.studentId) {
       return NextResponse.json(
         { error: verification.error || 'Invalid or expired OTP code.' },

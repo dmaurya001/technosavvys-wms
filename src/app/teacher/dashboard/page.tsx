@@ -40,11 +40,13 @@ import {
   Settings,
   KeyRound,
   Trash2,
-  X
+  X,
+  Database,
+  History
 } from 'lucide-react';
 import { exportSessionAttendanceToExcel } from '@/lib/excelExport';
 import { parseAndMatchFiles, parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
-import { maskEmail, maskPhone, normalizeStudentName } from '@/lib/studentAuth';
+import { maskEmail, maskPhone, normalizeStudentName } from '@/lib/studentHelpers';
 import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import { createClient } from '@/lib/supabase/client';
 import { BulkZipEntry, Workshop, WorkshopSession, AttendanceStatus, Student } from '@/types';
@@ -916,6 +918,34 @@ export default function TeacherDashboardPage() {
 
   // Admin Settings & Change Password Modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<Array<{
+    id: string;
+    action: string;
+    entityType: string;
+    entityId?: string;
+    actor?: string;
+    details?: Record<string, any>;
+    createdAt: string;
+  }>>([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditSearch, setAuditSearch] = useState('');
+
+  const openAuditLogs = async () => {
+    setShowAuditModal(true);
+    setIsLoadingAudit(true);
+    try {
+      const res = await fetch('/api/audit?limit=150');
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.logs)) {
+        setAuditLogs(data.logs);
+      }
+    } catch {
+      // keep existing
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  };
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -1010,6 +1040,13 @@ export default function TeacherDashboardPage() {
             <Award className="w-3.5 h-3.5 shrink-0 text-[#2ee6a6]" />
             <span className="truncate">Public Portal</span>
           </Link>
+          <button
+            onClick={openAuditLogs}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/40 text-xs font-semibold text-white transition-all text-center cursor-pointer"
+          >
+            <History className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="truncate">Audit Logs</span>
+          </button>
           <button
             onClick={() => {
               setCurrentPassword('');
@@ -2156,6 +2193,125 @@ export default function TeacherDashboardPage() {
                 </button>
               </div>
             </form>
+
+            <div className="pt-4 border-t border-white/10 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-200">
+                <Database className="w-4 h-4 text-emerald-400" />
+                Automated Database Backup
+              </div>
+              <p className="text-[11px] text-emerald-100/60">
+                Download full workshops, students, attendance &amp; certificates snapshot.
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <a
+                  href="/api/admin/backup?format=json"
+                  className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/[0.06] hover:bg-emerald-500/20 border border-white/10 text-xs font-semibold text-emerald-200 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  JSON Backup
+                </a>
+                <a
+                  href="/api/admin/backup?format=sql"
+                  className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/[0.06] hover:bg-emerald-500/20 border border-white/10 text-xs font-semibold text-emerald-200 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  SQL Backup
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* AUDIT LOGS VIEWER MODAL                                            */}
+      {/* ------------------------------------------------------------------ */}
+      {showAuditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 xs:p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="glass-panel rounded-2xl sm:rounded-3xl p-5 sm:p-7 max-w-4xl w-full border border-emerald-500/30 space-y-4 relative max-h-[85vh] flex flex-col">
+            <button
+              onClick={() => setShowAuditModal(false)}
+              className="absolute top-4 right-4 p-2 text-emerald-100/50 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pr-8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Security &amp; Activity Audit Logs</h3>
+                  <p className="text-xs text-emerald-100/60">Logins, attendance approvals, certificate issuances &amp; backups</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  placeholder="Filter action / entity..."
+                  className="px-3 py-1.5 text-xs rounded-xl glass-input placeholder-emerald-100/40"
+                />
+                <button
+                  type="button"
+                  onClick={openAuditLogs}
+                  className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-emerald-500/20 border border-white/10 text-xs font-semibold text-emerald-200 cursor-pointer"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-auto flex-1 rounded-2xl border border-white/10 bg-black/20">
+              {isLoadingAudit ? (
+                <div className="p-10 text-center text-xs text-emerald-200/70">Loading audit logs...</div>
+              ) : auditLogs.length === 0 ? (
+                <div className="p-10 text-center text-xs text-emerald-200/60">No audit logs recorded yet.</div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="sticky top-0 bg-[#081a10] border-b border-white/10 text-[10px] uppercase tracking-wider text-emerald-300/80">
+                    <tr>
+                      <th className="py-2.5 px-3">Timestamp</th>
+                      <th className="py-2.5 px-3">Action</th>
+                      <th className="py-2.5 px-3">Entity</th>
+                      <th className="py-2.5 px-3">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {auditLogs
+                      .filter((l) => {
+                        const q = auditSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          l.action.toLowerCase().includes(q) ||
+                          l.entityType.toLowerCase().includes(q) ||
+                          (l.entityId || '').toLowerCase().includes(q) ||
+                          JSON.stringify(l.details || {}).toLowerCase().includes(q)
+                        );
+                      })
+                      .map((log) => (
+                        <tr key={log.id} className="hover:bg-white/[0.03]">
+                          <td className="py-2.5 px-3 text-emerald-100/60 whitespace-nowrap font-mono">
+                            {new Date(log.createdAt).toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 font-semibold text-emerald-300 whitespace-nowrap">
+                            {log.action}
+                          </td>
+                          <td className="py-2.5 px-3 text-white whitespace-nowrap">
+                            {log.entityType}
+                            {log.entityId ? <span className="text-emerald-100/50 ml-1">({log.entityId})</span> : null}
+                          </td>
+                          <td className="py-2.5 px-3 text-emerald-100/70 font-mono max-w-xs truncate">
+                            {JSON.stringify(log.details || {})}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import {
 } from '@/lib/attendanceStore';
 import { AttendanceStatus } from '@/types';
 import { logAuditEvent } from '@/lib/audit';
+import { sendAttendanceApprovalEmail } from '@/lib/emailService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -125,6 +126,16 @@ export async function PATCH(request: NextRequest) {
       entityId: id,
       details: { status, studentName: updated.studentName, updatedBy: auth.session.email },
     });
+
+    if ((status === 'APPROVED' || status === 'CERTIFICATE_ELIGIBLE') && updated.studentEmail) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin;
+      void sendAttendanceApprovalEmail({
+        toEmail: updated.studentEmail,
+        studentName: updated.studentName,
+        workshopTitle: updated.workshopTitle,
+        portalUrl: `${siteUrl}/student/login`,
+      });
+    }
 
     return NextResponse.json({
       success: true,
