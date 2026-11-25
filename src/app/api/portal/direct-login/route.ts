@@ -11,6 +11,7 @@ import {
 } from '@/lib/sessionManager';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 import { INITIAL_STUDENTS, INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
 import { getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { getAllCertificates } from '@/lib/certificateStore';
@@ -80,6 +81,36 @@ export async function POST(request: NextRequest) {
       }
     } catch {}
 
+    // 1b. Check in Hostinger MySQL Students table if configured
+    if (!matchedStudent && isMySQLConfigured()) {
+      try {
+        const rows = await executeMySQLQuery<any[]>(
+          `SELECT id, name, email, phone, course, college, year FROM students WHERE LOWER(TRIM(email)) = ?`,
+          [targetEmail]
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          const found = rows.find((s) => {
+            if (!cleanName) return true;
+            const sName = normalizeStudentName(s.name || '');
+            return sName === cleanName || sName.includes(cleanName) || cleanName.includes(sName);
+          });
+          if (found) {
+            matchedStudent = {
+              id: found.id,
+              name: found.name,
+              email: found.email || targetEmail,
+              phone: found.phone || '',
+              regNo: found.id,
+              college: found.college || 'Engineering & Technology',
+              batch: found.year || 'Batch 2026',
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[direct-login] MySQL student lookup error:', err);
+      }
+    }
+
     // 2. Check in Supabase Students table if configured
     if (!matchedStudent && isSupabaseConfigured()) {
       try {
@@ -113,8 +144,8 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
 
-    // 3. Check in Mock Dataset
-    if (!matchedStudent) {
+    // 3. Check in Mock Dataset (development only)
+    if (!matchedStudent && process.env.NODE_ENV !== 'production') {
       const mockMatch = INITIAL_STUDENTS.find((s) => {
         const matchesEmail = s.email && s.email.trim().toLowerCase() === targetEmail;
         if (!matchesEmail) return false;
@@ -263,8 +294,8 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
 
-    // Fallback to mock certificates
-    if (certsList.length === 0) {
+    // Fallback to mock certificates (development only)
+    if (certsList.length === 0 && process.env.NODE_ENV !== 'production') {
       const matched = INITIAL_CERTIFICATES.filter((c) => {
         if (c.studentEmail && targetEmail) {
           return c.studentEmail.trim().toLowerCase() === targetEmail;

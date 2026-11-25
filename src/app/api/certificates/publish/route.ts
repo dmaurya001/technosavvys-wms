@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { extractAndValidateSession } from '@/lib/sessionManager';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 import { getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { saveCertificate } from '@/lib/certificateStore';
 import { normalizeStudentName } from '@/lib/studentAuth';
@@ -189,6 +190,20 @@ export async function POST(request: NextRequest) {
       };
 
       await saveCertificate(certRecord);
+
+      // 4b. Persist PDF binary in Hostinger MySQL if configured
+      if (item.fileBase64 && isMySQLConfigured()) {
+        try {
+          const pdfBuffer = Buffer.from(item.fileBase64, 'base64');
+          await executeMySQLQuery(
+            `UPDATE certificates SET pdf_data = ? WHERE certificate_no = ?`,
+            [pdfBuffer, certRecord.certificateNo || certRecord.id]
+          );
+        } catch (err) {
+          console.warn('[Certificate Publish] MySQL PDF blob update warning:', err);
+        }
+      }
+
       publishedRecords.push(certRecord);
     }
 

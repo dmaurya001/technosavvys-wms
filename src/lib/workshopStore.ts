@@ -98,67 +98,60 @@ export async function getAllWorkshops(): Promise<Workshop[]> {
 
   // 1. Hostinger / Remote MySQL Integration (Priority 1 if configured)
   if (isMySQLConfigured()) {
-    try {
-      const rows = await executeMySQLQuery<any[]>(
-        `SELECT w.*, 
-                s.id as sess_id, s.session_title, s.date as sess_date, s.start_time, s.end_time, s.location as sess_location, s.status as sess_status
-         FROM workshops w
-         LEFT JOIN workshop_sessions s ON w.id = s.workshop_id
-         ORDER BY w.created_at DESC`
-      );
-      if (Array.isArray(rows) && rows.length > 0) {
-        const wsMap = new Map<string, Workshop>();
-        for (const r of rows) {
-          if (!wsMap.has(r.id)) {
-            wsMap.set(r.id, {
-              id: r.id,
-              title: r.title,
-              category: r.category,
-              trainer: r.trainer,
-              trainerRole: r.trainer_role || 'Senior Principal Instructor',
-              date: r.date,
-              time: r.time,
-              duration: r.duration,
-              location: r.location,
-              capacity: r.capacity,
-              price: Number(r.price) || 0,
-              status: r.status,
-              description: r.description || '',
-              tags: typeof r.tags === 'string' && r.tags.startsWith('[') ? JSON.parse(r.tags) : ['Workshop'],
-              enrolledCount: r.enrolled_count || 0,
-              sessions: [],
+    const rows = await executeMySQLQuery<any[]>(
+      `SELECT w.*, 
+              s.id as sess_id, s.session_title, s.date as sess_date, s.start_time, s.end_time, s.location as sess_location, s.status as sess_status
+       FROM workshops w
+       LEFT JOIN workshop_sessions s ON w.id = s.workshop_id
+       ORDER BY w.created_at DESC`
+    );
+    const wsMap = new Map<string, Workshop>();
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        if (!wsMap.has(r.id)) {
+          wsMap.set(r.id, {
+            id: r.id,
+            title: r.title,
+            category: r.category,
+            trainer: r.trainer,
+            trainerRole: r.trainer_role || 'Senior Principal Instructor',
+            date: r.date,
+            time: r.time,
+            duration: r.duration,
+            location: r.location,
+            capacity: r.capacity,
+            price: Number(r.price) || 0,
+            status: r.status,
+            description: r.description || '',
+            tags: typeof r.tags === 'string' && r.tags.startsWith('[') ? JSON.parse(r.tags) : ['Workshop'],
+            enrolledCount: r.enrolled_count || 0,
+            sessions: [],
+          });
+        }
+        if (r.sess_id) {
+          const ws = wsMap.get(r.id)!;
+          if (!ws.sessions.some((s) => s.id === r.sess_id)) {
+            ws.sessions.push({
+              id: r.sess_id,
+              workshopId: r.id,
+              sessionTitle: r.session_title,
+              date: r.sess_date,
+              startTime: r.start_time,
+              endTime: r.end_time,
+              location: r.sess_location,
+              status: r.sess_status,
+              isActive: r.sess_status !== 'Completed' && r.sess_status !== 'Cancelled',
+              qrToken: r.qr_token || getSessionPermanentQrToken(r.id, r.sess_id),
             });
           }
-          if (r.sess_id) {
-            const ws = wsMap.get(r.id)!;
-            if (!ws.sessions.some((s) => s.id === r.sess_id)) {
-              ws.sessions.push({
-                id: r.sess_id,
-                workshopId: r.id,
-                sessionTitle: r.session_title,
-                date: r.sess_date,
-                startTime: r.start_time,
-                endTime: r.end_time,
-                location: r.sess_location,
-                status: r.sess_status,
-                isActive: r.sess_status !== 'Completed' && r.sess_status !== 'Cancelled',
-                qrToken: r.qr_token || getSessionPermanentQrToken(r.id, r.sess_id),
-              });
-            }
-          }
         }
-        for (const ws of wsMap.values()) {
-          const idx = memoryWorkshops.findIndex((w) => w.id === ws.id);
-          if (idx >= 0) memoryWorkshops[idx] = ws;
-          else memoryWorkshops.unshift(ws);
-        }
-        global.__technosavvysWorkshops = memoryWorkshops;
-        safeSaveToFile(memoryWorkshops);
-        return memoryWorkshops;
       }
-    } catch (err) {
-      console.warn('[workshopStore] MySQL query error, falling back:', err);
     }
+    const mysqlWorkshops = Array.from(wsMap.values());
+    memoryWorkshops = mysqlWorkshops;
+    global.__technosavvysWorkshops = memoryWorkshops;
+    safeSaveToFile(memoryWorkshops);
+    return memoryWorkshops;
   }
 
   if (isSupabaseConfigured()) {
@@ -397,12 +390,8 @@ export async function deleteWorkshop(id: string): Promise<boolean> {
   safeSaveToFile(memoryWorkshops);
 
   if (isMySQLConfigured()) {
-    try {
-      await executeMySQLQuery(`DELETE FROM workshop_sessions WHERE workshop_id = ?`, [id]);
-      await executeMySQLQuery(`DELETE FROM workshops WHERE id = ?`, [id]);
-    } catch (err) {
-      console.warn('[workshopStore] MySQL delete failed:', err);
-    }
+    await executeMySQLQuery(`DELETE FROM workshop_sessions WHERE workshop_id = ?`, [id]);
+    await executeMySQLQuery(`DELETE FROM workshops WHERE id = ?`, [id]);
   }
 
   if (isSupabaseConfigured()) {

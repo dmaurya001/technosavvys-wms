@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import { isSupabaseConfigured } from './supabase/config';
 import { createAdminClient } from './supabase/admin';
+import { isMySQLConfigured, executeMySQLQuery } from './mysql';
 
 export interface AuditLogPayload {
   action:
@@ -23,6 +25,23 @@ export interface AuditLogPayload {
 
 export async function logAuditEvent(payload: AuditLogPayload) {
   try {
+    if (isMySQLConfigured()) {
+      const id = `AUD-${crypto.randomUUID()}`;
+      await executeMySQLQuery(
+        `INSERT INTO audit_logs (id, action, entity_type, entity_id, actor, details)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          payload.action,
+          payload.entityType,
+          payload.entityId || null,
+          'system',
+          JSON.stringify(payload.details || {}),
+        ]
+      );
+      return;
+    }
+
     if (isSupabaseConfigured()) {
       const supabase = createAdminClient();
       const auditEntry = {

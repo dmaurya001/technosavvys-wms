@@ -7,6 +7,7 @@ import { INITIAL_CERTIFICATES, INITIAL_WORKSHOPS } from '@/data/mockData';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAllCertificates } from '@/lib/certificateStore';
 import { generateCertificatePdf } from '@/lib/pdfGenerator';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 
 const PDF_DIR = path.join(process.cwd(), 'data', 'pdf-certificates');
 const TMP_PDF_DIR = path.join(os.tmpdir(), 'technosavvys-pdf-certificates');
@@ -105,6 +106,31 @@ export async function GET(request: NextRequest) {
           'Cache-Control': 'private, no-cache, no-store, must-revalidate',
         },
       });
+    }
+
+    // 1b. Deliver PDF bytes from Hostinger MySQL if available (survives redeploys)
+    if (isMySQLConfigured()) {
+      try {
+        const rows = await executeMySQLQuery<any[]>(
+          `SELECT pdf_data FROM certificates WHERE certificate_no = ? OR certificate_no = ? LIMIT 1`,
+          [cert.certificateNo || certId, certId]
+        );
+        const pdfBlob = Array.isArray(rows) && rows[0]?.pdf_data ? rows[0].pdf_data : null;
+        if (pdfBlob) {
+          const fileBytes = Buffer.isBuffer(pdfBlob) ? pdfBlob : Buffer.from(pdfBlob);
+          return new NextResponse(fileBytes, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `attachment; filename="${cleanFilename}"`,
+              'Content-Length': fileBytes.length.toString(),
+              'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('[render-pdf] MySQL PDF blob lookup warning:', err);
+      }
     }
 
     const workshop = INITIAL_WORKSHOPS.find((w) => w.id === cert.workshopId);

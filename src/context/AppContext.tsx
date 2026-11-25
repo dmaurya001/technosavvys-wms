@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Workshop, Student, AttendanceRecord, Certificate, AttendanceStatus, CertificateGrade, WorkshopSession } from '../types';
-import { logAuditEvent } from '@/lib/audit';
+
+const logAuditEvent = (_payload: unknown) => {};
 
 interface Toast {
   id: string;

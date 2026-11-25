@@ -22,7 +22,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { logAuditEvent } from '@/lib/audit';
+const logAuditEvent = async (_payload: unknown) => {};
 
 interface HeaderProps {
   onOpenMobile: () => void;

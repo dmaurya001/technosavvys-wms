@@ -9,6 +9,8 @@ import {
   maskPhone,
 } from '@/lib/studentAuth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isSupabaseConfigured } from '@/lib/supabase/config';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 import { INITIAL_STUDENTS } from '@/data/mockData';
 import { getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { sendOtpEmail } from '@/lib/emailService';
@@ -105,8 +107,39 @@ export async function POST(request: NextRequest) {
       }
     } catch {}
 
-    // 2. Check in Supabase if not yet resolved
-    if (!matchedStudent) {
+    // 1b. Check in Hostinger MySQL Students table if configured
+    if (!matchedStudent && isMySQLConfigured()) {
+      try {
+        const rows = await executeMySQLQuery<any[]>(
+          `SELECT id, name, email, phone, course FROM students WHERE LOWER(TRIM(email)) = ? OR phone LIKE ?`,
+          [targetEmail || '', cleanPhone ? `%${cleanPhone}` : '']
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          const found = rows.find((s) => {
+            const matchesEmail = targetEmail && s.email && s.email.trim().toLowerCase() === targetEmail;
+            const matchesPhone = cleanPhone && s.phone && normalizePhoneNumber(s.phone) === cleanPhone;
+            if (!matchesEmail && !matchesPhone) return false;
+            if (!cleanName) return true;
+            const sName = normalizeStudentName(s.name || '');
+            return sName === cleanName || sName.includes(cleanName) || cleanName.includes(sName);
+          });
+          if (found) {
+            matchedStudent = {
+              id: found.id,
+              name: found.name,
+              email: found.email || targetEmail,
+              phone: found.phone || targetPhone,
+              regNo: found.id,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[request-otp] MySQL student lookup error:', err);
+      }
+    }
+
+    // 2. Check in Supabase if configured and not yet resolved
+    if (!matchedStudent && isSupabaseConfigured()) {
       try {
         const supabaseAdmin = createAdminClient();
         const { data, error } = await supabaseAdmin
@@ -137,8 +170,8 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
 
-    // 3. Check in Mock Dataset
-    if (!matchedStudent) {
+    // 3. Check in Mock Dataset (development only)
+    if (!matchedStudent && process.env.NODE_ENV !== 'production') {
       const mockMatch = INITIAL_STUDENTS.find((s) => {
         const matchesEmail = targetEmail && s.email && s.email.trim().toLowerCase() === targetEmail;
         const matchesPhone = cleanPhone && s.phone && normalizePhoneNumber(s.phone) === cleanPhone;

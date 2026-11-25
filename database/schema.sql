@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS `certificates` (
   `grade` VARCHAR(50) NOT NULL DEFAULT 'DISTINCTION',
   `verification_code` VARCHAR(64) NOT NULL,
   `score` VARCHAR(50) DEFAULT '95%',
+  `pdf_data` LONGBLOB DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`certificate_no`),
   UNIQUE KEY `uk_verification_code` (`verification_code`),

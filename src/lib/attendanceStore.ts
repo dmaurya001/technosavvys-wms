@@ -94,48 +94,33 @@ export async function getAllAttendanceRecords(filter?: {
 
   // 1. Hostinger / Remote MySQL Integration (Priority 1 if configured)
   if (isMySQLConfigured()) {
-    try {
-      const rows = await executeMySQLQuery<any[]>(
-        `SELECT * FROM attendance_records ORDER BY created_at DESC`
-      );
-      if (Array.isArray(rows) && rows.length > 0) {
-        for (const r of rows) {
-          const mapped: AttendanceRecord = {
-            id: r.id,
-            workshopId: r.workshop_id,
-            workshopTitle: r.workshop_title,
-            sessionId: r.session_id,
-            sessionTitle: r.session_title,
-            studentId: r.student_id,
-            studentName: r.student_name,
-            studentEmail: r.student_email,
-            studentPhone: r.student_phone,
-            studentCourse: r.student_course,
-            date: r.date,
-            time: r.time,
-            serverTimestamp: r.server_timestamp,
-            status: r.status as AttendanceStatus,
-            checkInMethod: r.check_in_method as any,
-            notes: r.notes || '',
-          };
-          const idx = records.findIndex(
-            (rec) =>
-              rec.id === mapped.id ||
-              (rec.studentEmail === mapped.studentEmail && rec.sessionId === mapped.sessionId)
-          );
-          if (idx >= 0) {
-            records[idx] = mapped;
-          } else {
-            records.unshift(mapped);
-          }
-        }
-        memoryAttendance = records;
-        global.__technosavvysAttendance = records;
-        safeSaveToFile(records);
-      }
-    } catch (err) {
-      console.warn('[attendanceStore] MySQL query failed, falling back:', err);
-    }
+    const rows = await executeMySQLQuery<any[]>(
+      `SELECT * FROM attendance_records ORDER BY created_at DESC`
+    );
+    const mysqlRecords: AttendanceRecord[] = Array.isArray(rows)
+      ? rows.map((r) => ({
+          id: r.id,
+          workshopId: r.workshop_id,
+          workshopTitle: r.workshop_title,
+          sessionId: r.session_id,
+          sessionTitle: r.session_title,
+          studentId: r.student_id,
+          studentName: r.student_name,
+          studentEmail: r.student_email,
+          studentPhone: r.student_phone,
+          studentCourse: r.student_course,
+          date: r.date,
+          time: r.time,
+          serverTimestamp: r.server_timestamp,
+          status: r.status as AttendanceStatus,
+          checkInMethod: r.check_in_method as any,
+          notes: r.notes || '',
+        }))
+      : [];
+    memoryAttendance = mysqlRecords;
+    global.__technosavvysAttendance = mysqlRecords;
+    safeSaveToFile(mysqlRecords);
+    records = mysqlRecords;
   }
 
   if (isSupabaseConfigured()) {
@@ -385,11 +370,7 @@ export async function updateAttendanceStatusInStore(
   safeSaveToFile(memoryAttendance);
 
   if (isMySQLConfigured()) {
-    try {
-      await executeMySQLQuery(`UPDATE attendance_records SET status = ? WHERE id = ?`, [status, id]);
-    } catch (err) {
-      console.warn('[attendanceStore] MySQL status update failed:', err);
-    }
+    await executeMySQLQuery(`UPDATE attendance_records SET status = ? WHERE id = ?`, [status, id]);
   }
 
   if (isSupabaseConfigured()) {
@@ -425,12 +406,8 @@ export async function bulkUpdateAttendanceStatusInStore(
     safeSaveToFile(memoryAttendance);
 
     if (isMySQLConfigured()) {
-      try {
-        const placeholders = ids.map(() => '?').join(',');
-        await executeMySQLQuery(`UPDATE attendance_records SET status = ? WHERE id IN (${placeholders})`, [status, ...ids]);
-      } catch (err) {
-        console.warn('[attendanceStore] MySQL bulk update failed:', err);
-      }
+      const placeholders = ids.map(() => '?').join(',');
+      await executeMySQLQuery(`UPDATE attendance_records SET status = ? WHERE id IN (${placeholders})`, [status, ...ids]);
     }
 
     if (isSupabaseConfigured()) {
@@ -464,11 +441,7 @@ export async function deleteAttendanceByWorkshop(workshopId: string): Promise<At
   safeSaveToFile(memoryAttendance);
 
   if (isMySQLConfigured()) {
-    try {
-      await executeMySQLQuery(`DELETE FROM attendance_records WHERE workshop_id = ?`, [workshopId]);
-    } catch (err) {
-      console.warn('[attendanceStore] MySQL delete failed:', err);
-    }
+    await executeMySQLQuery(`DELETE FROM attendance_records WHERE workshop_id = ?`, [workshopId]);
   }
 
   if (isSupabaseConfigured()) {
