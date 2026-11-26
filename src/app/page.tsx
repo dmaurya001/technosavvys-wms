@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { User } from 'lucide-react';
 
 export default function Home() {
   const scrollTo = (id: string) => {
@@ -9,7 +10,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col w-full">
+    <div className="min-h-screen flex flex-col w-full overflow-x-hidden">
       {/* FULL-WIDTH STICKY HEADER */}
       <header className="tech-header">
         <div className="header-inner">
@@ -31,7 +32,8 @@ export default function Home() {
               Workshop
             </button>
             <button className="pbtn" onClick={() => scrollTo('portals')}>
-              👤 Login Portal
+              <User className="w-4 h-4 text-[#f9b233]" />
+              Login Portal
             </button>
           </nav>
         </div>

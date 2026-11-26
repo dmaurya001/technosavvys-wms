@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Home } from 'lucide-react';
+import { Home, User } from 'lucide-react';
 
 interface AppHeaderProps {
   roleBadge?: string;
@@ -67,7 +67,8 @@ export default function AppHeader({
             <nav className="tech-nav">
               <HomeNavLink />
               <Link href="/#portals" className="pbtn">
-                👤 Login Portal
+                <User className="w-3.5 h-3.5 text-[#f9b233]" />
+                Login Portal
               </Link>
             </nav>
           )}
