@@ -83,7 +83,7 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+          <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
             Workshop Title *
           </label>
           <input
@@ -92,19 +92,19 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
             placeholder="e.g., Microservices Architecture with Golang & Docker"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white placeholder-[#e2e0f5]/45 focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Category
             </label>
             <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63] text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             >
               <option value="Web Dev">Web Dev</option>
               <option value="AI & ML">AI & ML</option>
@@ -116,13 +116,13 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Status
             </label>
             <select
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63] text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             >
               <option value="Upcoming">Upcoming</option>
               <option value="Ongoing">Ongoing</option>
@@ -134,7 +134,7 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Lead Trainer / Speaker *
             </label>
             <input
@@ -143,12 +143,12 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
               placeholder="e.g. Prof. Arvind Krishnan"
               value={formData.trainer}
               onChange={(e) => setFormData({ ...formData, trainer: e.target.value })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white placeholder-[#e2e0f5]/45 focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Trainer Role / Designation
             </label>
             <input
@@ -156,38 +156,38 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
               placeholder="e.g. Senior Principal Architect"
               value={formData.trainerRole}
               onChange={(e) => setFormData({ ...formData, trainerRole: e.target.value })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white placeholder-[#e2e0f5]/45 focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Date
             </label>
             <input
               type="date"
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Time Slot
             </label>
             <input
               type="text"
               value={formData.time}
               onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
               Capacity
             </label>
             <input
@@ -196,37 +196,37 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
               max="500"
               value={formData.capacity}
               onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+          <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
             Location / Room
           </label>
           <input
             type="text"
             value={formData.location}
             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+          <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
             Tags (Comma separated)
           </label>
           <input
             type="text"
             value={formData.tagsString}
             onChange={(e) => setFormData({ ...formData, tagsString: e.target.value })}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+          <label className="block text-xs font-semibold text-[#e2e0f5] mb-1">
             Brief Syllabus & Description
           </label>
           <textarea
@@ -234,11 +234,11 @@ export const NewWorkshopModal: React.FC<NewWorkshopModalProps> = ({ isOpen, onCl
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             placeholder="Key concepts, prerequisites, and learning objectives..."
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#f9b233]/30 bg-[#241d63]/80 text-white placeholder-[#e2e0f5]/45 focus:outline-none focus:ring-2 focus:ring-[#f9b233] focus:border-[#f9b233]"
           />
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#f9b233]/20">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>

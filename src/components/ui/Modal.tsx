@@ -53,22 +53,22 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Dialog */}
       <div
-        className={`relative w-full ${maxWidthClasses[maxWidth]} bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-10 overflow-hidden transform transition-all`}
+        className={`relative w-full ${maxWidthClasses[maxWidth]} bg-[#19134a] text-white rounded-2xl shadow-2xl border border-[#f9b233]/35 z-10 overflow-hidden transform transition-all`}
       >
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[#f9b233]/20 flex items-center justify-between bg-[#241d63]/70">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+            <h3 className="text-lg font-bold text-white">
               {title}
             </h3>
             {description && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-[#e2e0f5]/75 mt-0.5">
                 {description}
               </p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-[#e2e0f5]/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
