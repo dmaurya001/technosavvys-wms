@@ -31,7 +31,7 @@ export interface StudentSession extends BaseSession {
 export type AppSession = TeacherSession | StudentSession;
 
 // Configuration Constants
-export const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes of inactivity
+export const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes of inactivity
 export const TEACHER_ABSOLUTE_EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours absolute
 export const STUDENT_ABSOLUTE_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours absolute
 

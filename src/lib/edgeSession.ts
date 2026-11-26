@@ -1,6 +1,6 @@
 // Edge-safe session validator for Next.js Middleware (Web Crypto API)
 
-export const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+export const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 export const TEACHER_ABSOLUTE_EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
 export const STUDENT_ABSOLUTE_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 hours
 

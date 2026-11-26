@@ -6,20 +6,24 @@ import { AlertCircle, Clock, ShieldAlert } from 'lucide-react';
 
 interface InactivityTrackerProps {
   role: 'teacher' | 'student';
-  timeoutMinutes?: number; // Default 15 minutes
+  timeoutMinutes?: number; // Default 10 minutes
+  tabSwitchTimeoutMinutes?: number; // Default 2 minutes when tab is hidden
 }
 
 export default function InactivityTracker({
   role,
-  timeoutMinutes = 15,
+  timeoutMinutes = 10,
+  tabSwitchTimeoutMinutes = 2,
 }: InactivityTrackerProps) {
   const router = useRouter();
   const timeoutMs = timeoutMinutes * 60 * 1000;
+  const tabTimeoutMs = tabSwitchTimeoutMinutes * 60 * 1000;
   const warningMs = 60 * 1000; // Show warning 60 seconds before auto-logout
   const pingIntervalMs = 3 * 60 * 1000; // Keep-alive ping every 3 minutes
 
   const lastActivityRef = useRef<number>(Date.now());
   const lastPingRef = useRef<number>(Date.now());
+  const hiddenAtRef = useRef<number | null>(null);
   const [showWarning, setShowWarning] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(60);
 
@@ -79,9 +83,30 @@ export default function InactivityTracker({
 
     events.forEach((evt) => window.addEventListener(evt, throttledHandler, { passive: true }));
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+      } else {
+        if (hiddenAtRef.current && Date.now() - hiddenAtRef.current >= tabTimeoutMs) {
+          performLogout();
+          return;
+        }
+        hiddenAtRef.current = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // Check timer interval every second
     const interval = setInterval(() => {
       const now = Date.now();
+
+      if (document.hidden && hiddenAtRef.current && now - hiddenAtRef.current >= tabTimeoutMs) {
+        clearInterval(interval);
+        performLogout();
+        return;
+      }
+
       const idleTime = now - lastActivityRef.current;
       const timeLeft = timeoutMs - idleTime;
 
@@ -98,9 +123,10 @@ export default function InactivityTracker({
 
     return () => {
       events.forEach((evt) => window.removeEventListener(evt, throttledHandler));
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(interval);
     };
-  }, [timeoutMs, warningMs, showWarning, handleUserActivity, performLogout]);
+  }, [timeoutMs, tabTimeoutMs, warningMs, showWarning, handleUserActivity, performLogout]);
 
   if (!showWarning) return null;
 
@@ -116,8 +142,8 @@ export default function InactivityTracker({
           </h4>
           <p className="text-xs text-amber-200/80 font-light">
             You will be automatically logged out in{' '}
-            <span className="font-mono font-bold text-amber-300">{secondsRemaining}s</span> due to 15
-            minutes of inactivity.
+            <span className="font-mono font-bold text-amber-300">{secondsRemaining}s</span> due to{' '}
+            {timeoutMinutes} minutes of inactivity.
           </p>
           <div className="pt-2 flex items-center justify-between">
             <button
