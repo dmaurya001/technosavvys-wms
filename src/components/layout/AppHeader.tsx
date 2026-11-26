@@ -45,7 +45,7 @@ export default function AppHeader({
           </div>
           <div className="brand-div" />
           <div>
-            <h2>technosavvys</h2>
+            <h2>Technosavvys</h2>
             <p>creating smarter tomorrow!</p>
           </div>
         </Link>

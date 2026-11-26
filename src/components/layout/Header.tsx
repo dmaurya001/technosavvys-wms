@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src="/logo.png" alt="logo" className="w-full h-full object-cover rounded-full" />
           </div>
           <div className="hidden sm:block">
-            <h2 className="text-sm font-extrabold text-white leading-tight">technosavvys</h2>
+            <h2 className="text-sm font-extrabold text-white leading-tight">Technosavvys</h2>
             <p className="text-[10px] italic text-[#d6f5ec] leading-tight">creating smarter tomorrow!</p>
           </div>
         </Link>

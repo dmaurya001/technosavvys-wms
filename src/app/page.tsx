@@ -20,7 +20,7 @@ export default function Home() {
             </div>
             <div className="brand-div" />
             <div>
-              <h2>technosavvys</h2>
+              <h2>Technosavvys</h2>
               <p>creating smarter tomorrow!</p>
             </div>
           </Link>
@@ -113,7 +113,7 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="tech-footer">
-        &copy; {new Date().getFullYear()} technosavvys &middot; Founded 2023
+        &copy; {new Date().getFullYear()} Technosavvys &middot; Founded 2023
       </footer>
     </div>
   );
