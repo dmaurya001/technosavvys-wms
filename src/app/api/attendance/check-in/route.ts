@@ -6,11 +6,13 @@ import { normalizePhoneNumber } from '@/lib/studentAuth';
 import { logAuditEvent } from '@/lib/audit';
 import { saveAttendanceRecord, getAllAttendanceRecords } from '@/lib/attendanceStore';
 import { getAllWorkshops } from '@/lib/workshopStore';
+import { isMySQLConfigured, executeMySQLQuery } from '@/lib/mysql';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { sessionId, token, fullName, email, phone, course } = body;
+    const { sessionId, token, fullName, email, phone, course, college } = body;
+    const cleanCollege = typeof college === 'string' ? college.trim() : '';
 
     if (!sessionId || !fullName || !email || !phone) {
       return NextResponse.json(
@@ -187,11 +189,37 @@ export async function POST(request: NextRequest) {
       serverTimestamp,
       status: 'PENDING_REVIEW', // Initial status must be PENDING_REVIEW
       checkInMethod: 'QR Scan',
-      notes: `Verified Permanent Session QR. Awaiting Admin Approval.`,
+      notes: cleanCollege
+        ? `College: ${cleanCollege} | Verified Permanent Session QR. Awaiting Admin Approval.`
+        : `Verified Permanent Session QR. Awaiting Admin Approval.`,
     };
 
     // Persist into server storage, INITIAL_ATTENDANCE and database
     await saveAttendanceRecord(newRecord as any);
+
+    if (isMySQLConfigured() && cleanCollege) {
+      try {
+        await executeMySQLQuery(
+          `INSERT INTO students (id, name, email, phone, course, college)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             name = VALUES(name),
+             phone = VALUES(phone),
+             course = VALUES(course),
+             college = VALUES(college)`,
+          [
+            `STU-${Date.now().toString().slice(-6)}`,
+            cleanName,
+            cleanEmail,
+            cleanPhone,
+            course || 'B.Tech - Computer Science',
+            cleanCollege,
+          ]
+        );
+      } catch (err) {
+        console.warn('[check-in] MySQL student college upsert warning:', err);
+      }
+    }
 
     await logAuditEvent({
       action: 'ATTENDANCE_SUBMITTED_PENDING',
