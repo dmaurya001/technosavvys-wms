@@ -6,7 +6,6 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Workshop, WorkshopSession } from '@/types';
-import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import {
   QrCode,
   Download,
@@ -34,6 +33,7 @@ export const SessionQRModal: React.FC<SessionQRModalProps> = ({
   session,
 }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [fetchedToken, setFetchedToken] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState('');
 
@@ -43,9 +43,20 @@ export const SessionQRModal: React.FC<SessionQRModalProps> = ({
     }
   }, []);
 
-  const permToken =
-    session?.qrToken ||
-    (workshop && session ? getSessionPermanentQrToken(workshop.id, session.id) : '');
+  useEffect(() => {
+    if (isOpen && workshop && session && !session.qrToken) {
+      fetch(
+        `/api/workshops/qr-token?workshopId=${encodeURIComponent(workshop.id)}&sessionId=${encodeURIComponent(session.id)}`
+      )
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.token) setFetchedToken(d.token);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, workshop, session]);
+
+  const permToken = session?.qrToken || fetchedToken;
   const wsParam = workshop ? encodeURIComponent(workshop.id) : '';
   const titleParam = workshop ? encodeURIComponent(workshop.title || 'Workshop') : '';
   const checkInUrl =

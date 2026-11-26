@@ -47,8 +47,19 @@ import {
 import { exportSessionAttendanceToExcel } from '@/lib/excelExport';
 import { parseAndMatchFiles, parseAndMatchCertificateZip } from '@/lib/zipCertificateParser';
 import { maskEmail, maskPhone, normalizeStudentName } from '@/lib/studentHelpers';
-import { getSessionPermanentQrToken } from '@/lib/qrSecurity';
 import { createClient } from '@/lib/supabase/client';
+
+async function fetchSessionQrToken(workshopId: string, sessionId: string): Promise<string> {
+  try {
+    const res = await fetch(
+      `/api/workshops/qr-token?workshopId=${encodeURIComponent(workshopId)}&sessionId=${encodeURIComponent(sessionId)}`
+    );
+    const data = await res.json();
+    return data?.token || '';
+  } catch {
+    return '';
+  }
+}
 import { BulkZipEntry, Workshop, WorkshopSession, AttendanceStatus, Student } from '@/types';
 
 const logAuditEvent = async (_payload: unknown) => {};
@@ -124,8 +135,11 @@ export default function TeacherDashboardPage() {
       if (ws.sessions && ws.sessions.length > 0) {
         const sess = ws.sessions[0];
         setActiveSession(sess);
-        const permToken = sess.qrToken || getSessionPermanentQrToken(ws.id, sess.id);
-        setQrToken(permToken);
+        if (sess.qrToken) {
+          setQrToken(sess.qrToken);
+        } else {
+          void fetchSessionQrToken(ws.id, sess.id).then((t) => t && setQrToken(t));
+        }
       } else {
         setActiveSession(null);
         setQrToken('');
@@ -138,7 +152,11 @@ export default function TeacherDashboardPage() {
       setWorkshopTime(first.time);
       if (first.sessions && first.sessions.length > 0) {
         setActiveSession(first.sessions[0]);
-        setQrToken(first.sessions[0].qrToken || getSessionPermanentQrToken(first.id, first.sessions[0].id));
+        if (first.sessions[0].qrToken) {
+          setQrToken(first.sessions[0].qrToken);
+        } else {
+          void fetchSessionQrToken(first.id, first.sessions[0].id).then((t) => t && setQrToken(t));
+        }
       }
     }
   }, [selectedWorkshopId, workshops]);
@@ -146,20 +164,26 @@ export default function TeacherDashboardPage() {
   // When active session or workshop changes, generate stable permanent QR data URL once
   useEffect(() => {
     if (activeSession && selectedWorkshopId && origin) {
-      const permToken =
-        activeSession.qrToken || getSessionPermanentQrToken(selectedWorkshopId, activeSession.id);
-      setQrToken(permToken);
+      const applyQr = (permToken: string) => {
+        if (!permToken) return;
+        setQrToken(permToken);
+        const wsParam = encodeURIComponent(selectedWorkshopId);
+        const titleParam = encodeURIComponent(workshopName || 'Workshop');
+        const checkInUrl = `${origin}/attendance/${activeSession.id}?token=${permToken}&ws=${wsParam}&title=${titleParam}`;
+        QRCode.toDataURL(checkInUrl, {
+          width: 360,
+          margin: 2,
+          color: { dark: '#060f08', light: '#ffffff' },
+        })
+          .then((url) => setQrCodeDataUrl(url))
+          .catch((err) => console.error('QR generation error:', err));
+      };
 
-      const wsParam = encodeURIComponent(selectedWorkshopId);
-      const titleParam = encodeURIComponent(workshopName || 'Workshop');
-      const checkInUrl = `${origin}/attendance/${activeSession.id}?token=${permToken}&ws=${wsParam}&title=${titleParam}`;
-      QRCode.toDataURL(checkInUrl, {
-        width: 360,
-        margin: 2,
-        color: { dark: '#060f08', light: '#ffffff' },
-      })
-        .then((url) => setQrCodeDataUrl(url))
-        .catch((err) => console.error('QR generation error:', err));
+      if (activeSession.qrToken) {
+        applyQr(activeSession.qrToken);
+      } else {
+        void fetchSessionQrToken(selectedWorkshopId, activeSession.id).then(applyQr);
+      }
     } else {
       setQrCodeDataUrl('');
     }
@@ -212,7 +236,7 @@ export default function TeacherDashboardPage() {
     );
   };
 
-  const handleGenerateQr = (e?: React.FormEvent) => {
+  const handleGenerateQr = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
     if (!workshopName.trim()) {
@@ -226,7 +250,7 @@ export default function TeacherDashboardPage() {
     if (isCreatingNew || !targetWorkshop || isDifferentTitle) {
       const newWsId = `WS-${Date.now().toString().slice(-4)}`;
       const newSessionId = `SESS-${newWsId}-1`;
-      const permanentSessionQrToken = getSessionPermanentQrToken(newWsId, newSessionId);
+      const permanentSessionQrToken = await fetchSessionQrToken(newWsId, newSessionId);
 
       const newSession: WorkshopSession = {
         id: newSessionId,
@@ -273,8 +297,11 @@ export default function TeacherDashboardPage() {
       if (targetWorkshop.sessions && targetWorkshop.sessions.length > 0) {
         const sess = targetWorkshop.sessions[0];
         setActiveSession(sess);
-        const permToken = sess.qrToken || getSessionPermanentQrToken(targetWorkshop.id, sess.id);
-        setQrToken(permToken);
+        if (sess.qrToken) {
+          setQrToken(sess.qrToken);
+        } else {
+          void fetchSessionQrToken(targetWorkshop.id, sess.id).then((t) => t && setQrToken(t));
+        }
       }
       addToast(`QR Code session refreshed for "${workshopName.trim()}".`, 'success');
     }
@@ -2327,7 +2354,11 @@ export default function TeacherDashboardPage() {
           setWorkshopTime(newWs.time);
           if (newWs.sessions && newWs.sessions.length > 0) {
             setActiveSession(newWs.sessions[0]);
-            setQrToken(newWs.sessions[0].qrToken || getSessionPermanentQrToken(newWs.id, newWs.sessions[0].id));
+            if (newWs.sessions[0].qrToken) {
+              setQrToken(newWs.sessions[0].qrToken);
+            } else {
+              void fetchSessionQrToken(newWs.id, newWs.sessions[0].id).then((t) => t && setQrToken(t));
+            }
           }
           setIsNewWorkshopModalOpen(false);
         }}
